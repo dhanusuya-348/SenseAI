@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/providers/SessionProvider";
 import { IntegrationProvider } from "@/context/IntegrationContext";
+import GameButton from "@/components/FroggyGame/GameButton";
+import NotificationManager from "@/components/FroggyGame/NotificationManager";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,6 +42,8 @@ export default function RootLayout({
         <SessionProvider>
           <IntegrationProvider>
             {children}
+            <GameButton />
+            <NotificationManager />
           </IntegrationProvider>
         </SessionProvider>
       </body>
