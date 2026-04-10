@@ -21,29 +21,35 @@ export const authOptions = {
       if (account && user) {
         token.accessToken = account.access_token;
         token.idToken = account.id_token;
-        
+
         // If this is a Google signin, get userId from backend
         if (account.provider === 'google') {
+          console.log("[Auth] Starting backend user registration for:", user.email);
+          const startTime = Date.now();
           try {
             const result = await registerUserWithBackend(user, account);
+            const duration = Date.now() - startTime;
+            console.log(`[Auth] Backend registration completed in ${duration}ms`);
             
             // Extract the ID from the result
             if (result && result.id) {
               // Store the backend userId directly in the token
               token.userId = result.id;
+              console.log("[Auth] Successfully stored userId in token:", result.id);
             } else {
-              console.error("Backend response missing ID field");
+              console.error("[Auth] Backend response missing ID field:", result);
             }
           } catch (error) {
-            console.error("Error storing backend user ID:", error);
+            const duration = Date.now() - startTime;
+            console.error(`[Auth] Backend storage failed after ${duration}ms:`, error);
           }
         }
       }
       
       return token;
     },
-    
-    async session({ session, token }) {      
+
+    async session({ session, token }) {
       // Send properties to the client
       if (session.user) {
         // Use the backend user ID directly as the main ID
@@ -52,19 +58,19 @@ export const authOptions = {
         } else {
           console.log("No userId in token!");
         }
-        
+
         // Add access token to session if it exists
         if (token.accessToken) {
           (session as any).accessToken = token.accessToken;
         }
       }
-      
+
       return session;
     },
-    
+
     async signIn({ user, account, profile }) {
       if (!account || !profile) return true;
-      
+
       try {
         // We no longer need to call registerUserWithBackend here
         // since we're now doing it in the jwt callback to store the ID

@@ -10,11 +10,13 @@ env_path = join(root_dir, ".env.aws")
 
 env_file_path = join(root_dir, ".env")
 if os.path.exists(env_file_path):
-    load_dotenv(env_file_path)
+    print(f"Loading core environment variables from {env_file_path}")
+    load_dotenv(env_file_path, override=True) # Ensure .env is prioritized
 
 if os.path.exists(env_path):
-    print(f"Loading environment variables from {env_path}")
-    load_dotenv(env_path)
+    # Only load .env.aws if explicitly needed, and don't override .env
+    print(f"Loading AWS specific environment variables from {env_path}")
+    load_dotenv(env_path, override=False)
 
 
 class Settings(BaseSettings):
