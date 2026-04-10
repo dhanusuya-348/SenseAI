@@ -7,16 +7,17 @@ from api.db.course import (
     get_courses_for_cohort as get_courses_for_cohort_from_db,
     get_cohorts_for_course as get_cohorts_for_course_from_db,
     get_tasks_for_course as get_tasks_for_course_from_db,
-    update_course_name as update_course_name_in_db,
+    get_course as get_course_from_db,
+    swap_milestone_ordering_for_course as swap_milestone_ordering_for_course_in_db,
+    swap_task_ordering_for_course as swap_task_ordering_for_course_in_db,
+    duplicate_course_to_org,
+    unlock_course as unlock_course_in_db,
+    update_course as update_course_in_db,
     add_tasks_to_courses as add_tasks_to_courses_in_db,
     remove_tasks_from_courses as remove_tasks_from_courses_in_db,
     update_task_orders as update_task_orders_in_db,
     add_milestone_to_course as add_milestone_to_course_in_db,
     update_milestone_orders as update_milestone_orders_in_db,
-    get_course as get_course_from_db,
-    swap_milestone_ordering_for_course as swap_milestone_ordering_for_course_in_db,
-    swap_task_ordering_for_course as swap_task_ordering_for_course_in_db,
-    duplicate_course_to_org,
 )
 from api.db.cohort import (
     add_course_to_cohorts as add_course_to_cohorts_in_db,
@@ -26,7 +27,7 @@ from api.models import (
     CreateCourseRequest,
     RemoveCourseFromCohortsRequest,
     AddCourseToCohortsRequest,
-    UpdateCourseNameRequest,
+    UpdateCourseRequest,
     AddTasksToCoursesRequest,
     RemoveTasksFromCoursesRequest,
     UpdateTaskOrdersRequest,
@@ -40,6 +41,8 @@ from api.models import (
     SwapTaskOrderingRequest,
     CourseCohort,
     DuplicateCourseRequest,
+    UnlockCourseRequest,
+    UnlockCourseResponse,
 )
 
 router = APIRouter()
@@ -47,7 +50,7 @@ router = APIRouter()
 
 @router.post("/", response_model=CreateCourseResponse)
 async def create_course(request: CreateCourseRequest) -> CreateCourseResponse:
-    return {"id": await create_course_in_db(request.name, request.org_id)}
+    return {"id": await create_course_in_db(request.name, request.org_id, request.unlock_cost)}
 
 
 @router.get("/")
@@ -57,9 +60,17 @@ async def get_all_courses_for_org(org_id: int) -> List[Course]:
 
 @router.get("/{course_id}", response_model=CourseWithMilestonesAndTasks)
 async def get_course(
-    course_id: int, only_published: bool = True
+    course_id: int, only_published: bool = True, user_id: int = None
 ) -> CourseWithMilestonesAndTasks:
-    return await get_course_from_db(course_id, only_published)
+    return await get_course_from_db(course_id, only_published, user_id)
+
+
+@router.post("/{course_id}/unlock", response_model=UnlockCourseResponse)
+async def unlock_course(course_id: int, request: UnlockCourseRequest) -> UnlockCourseResponse:
+    try:
+        return await unlock_course_in_db(course_id, request.user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/tasks")
@@ -82,12 +93,12 @@ async def update_task_orders(request: UpdateTaskOrdersRequest):
 
 @router.post("/{course_id}/milestones")
 async def add_milestone_to_course(
-    course_id: int, request: AddMilestoneToCourseRequest
+    course_id: int, data: AddMilestoneToCourseRequest
 ) -> AddMilestoneToCourseResponse:
     milestone_id, _ = await add_milestone_to_course_in_db(
         course_id,
-        request.name,
-        request.color,
+        data.name,
+        data.color,
     )
     return {"id": milestone_id}
 
@@ -136,8 +147,8 @@ async def get_tasks_for_course(course_id: int) -> List[Dict]:
 
 
 @router.put("/{course_id}")
-async def update_course_name(course_id: int, request: UpdateCourseNameRequest):
-    await update_course_name_in_db(course_id, request.name)
+async def update_course(course_id: int, request: UpdateCourseRequest):
+    await update_course_in_db(course_id, name=request.name, unlock_cost=request.unlock_cost)
     return {"success": True}
 
 

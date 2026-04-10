@@ -28,6 +28,8 @@ interface Course {
     name: string;
     milestones?: Milestone[];
     course_generation_status?: string | null;
+    is_locked?: boolean;
+    unlock_cost?: number;
 }
 
 export default function ClientSchoolMemberView({ slug }: { slug: string }) {
@@ -185,8 +187,10 @@ export default function ClientSchoolMemberView({ slug }: { slug: string }) {
         try {
             const url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/cohorts/${cohortId}/courses?include_tree=true`;
 
-            // Check if 'joined_at' exists, as older learners may not have this timestamp.
-            const cohortUrl = activeCohort?.joined_at ? `${url}&joined_at=${activeCohort.joined_at}` : url;
+            let cohortUrl = activeCohort?.joined_at ? `${url}&joined_at=${activeCohort.joined_at}` : url;
+            if (user?.id) {
+                cohortUrl += `&user_id=${user.id}`;
+            }
             const response = await fetch(cohortUrl);
 
             if (!response.ok) {

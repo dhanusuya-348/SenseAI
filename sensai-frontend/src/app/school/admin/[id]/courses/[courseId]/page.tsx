@@ -34,6 +34,7 @@ interface CourseDetails {
 
 // Default configuration for new questions
 const defaultQuestionConfig: QuizQuestionConfig = {
+    title: '',
     inputType: 'text',
     responseType: 'chat',
     questionType: 'objective',
@@ -139,6 +140,7 @@ export default function CreateCourse() {
     const [selectedCohort, setSelectedCohort] = useState<any | null>(null);
 
     const [dripConfig, setDripConfig] = useState<DripConfig | undefined>(undefined);
+    const [unlockCost, setUnlockCost] = useState(0);
 
     const [selectedCohortForSettings, setSelectedCohortForSettings] = useState<any | null>(null);
 
@@ -186,6 +188,7 @@ export default function CreateCourse() {
 
             const data = await response.json();
             setCourseTitle(data.name);
+            setUnlockCost(data.unlock_cost || 0);
 
             // Check if milestones are available in the response
             if (data.milestones && Array.isArray(data.milestones)) {
@@ -511,8 +514,6 @@ export default function CreateCourse() {
                     milestone_id: parseInt(moduleId),
                     type: "learning_material",
                     title: "New learning material",
-                    status: "draft",
-                    scheduled_publish_at: null
                 }),
             });
 
@@ -545,7 +546,6 @@ export default function CreateCourse() {
                     milestone_id: parseInt(moduleId),
                     type: "quiz",
                     title: "New quiz",
-                    status: "draft"
                 }),
             });
 
@@ -576,7 +576,6 @@ export default function CreateCourse() {
                     milestone_id: parseInt(moduleId),
                     type: "assignment",
                     title: "New assignment",
-                    status: "draft"
                 }),
             });
 
@@ -669,7 +668,7 @@ export default function CreateCourse() {
         }
         setActiveQuestionId(questionId || null);
 
-        updateTaskAndQuestionIdInUrl(router, itemId, questionId);
+        updateTaskAndQuestionIdInUrl(router, itemId, questionId || null);
 
         // Ensure quiz items have questions property initialized
         if (item.type === 'quiz' && !item.questions) {
@@ -717,7 +716,7 @@ export default function CreateCourse() {
         // Only update URL if the questionId is different from current URL
         const currentQuestionId = searchParams.get('questionId');
         if (currentQuestionId !== questionId) {
-            updateTaskAndQuestionIdInUrl(router, activeItem?.id, questionId);
+            updateTaskAndQuestionIdInUrl(router, activeItem?.id || null, questionId);
         }
     };
 
@@ -906,6 +905,106 @@ export default function CreateCourse() {
         toggleModuleEditing(moduleId, false);
     };
 
+    const updateModuleDifficulty = async (moduleId: string, difficulty: "easy" | "medium" | "hard") => {
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/milestones/${moduleId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    difficulty
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to update module difficulty: ${response.status}`);
+            }
+
+            // Update the modules state
+            setModules(prevModules =>
+                prevModules.map(module => {
+                    if (module.id === moduleId) {
+                        return {
+                            ...module,
+                            difficulty
+                        };
+                    }
+                    return module;
+                })
+            );
+
+            console.log("Module difficulty updated successfully");
+
+            // Show toast notification
+            setToast({
+                show: true,
+                title: 'Difficulty set',
+                description: `Module difficulty updated to ${difficulty}`,
+                emoji: '🎯'
+            });
+
+            // Auto-hide toast after 3 seconds
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        } catch (error) {
+            console.error("Error updating module difficulty:", error);
+            // Show error toast
+            setToast({
+                show: true,
+                title: 'Update Failed',
+                description: 'Failed to update module difficulty',
+                emoji: '⚠️'
+            });
+
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        }
+    };
+
+    const updateCourseMetadata = async (updates: { name?: string, unlock_cost?: number }) => {
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/courses/${courseId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updates),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to update course: ${response.status}`);
+            }
+
+            if (updates.name) setCourseTitle(updates.name);
+            if (updates.unlock_cost !== undefined) setUnlockCost(updates.unlock_cost);
+
+            setToast({
+                show: true,
+                title: 'Saved',
+                description: `Course settings updated successfully`,
+                emoji: '✅'
+            });
+
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        } catch (error) {
+            console.error("Error updating course metadata:", error);
+            setToast({
+                show: true,
+                title: 'Error',
+                description: 'Failed to update course settings',
+                emoji: '❌'
+            });
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        }
+    };
+
     const cancelModuleEditing = (moduleId: string) => {
         // Find the heading element
         const headingElement = document.querySelector(`[data-module-id="${moduleId}"]`) as HTMLHeadingElement;
@@ -939,35 +1038,7 @@ export default function CreateCourse() {
     const saveCourseTitle = () => {
         if (titleRef.current) {
             const newTitle = titleRef.current.textContent || "";
-
-            // Make a PUT request to update the course name
-            fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/courses/${courseId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: newTitle
-                })
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Failed to update course: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Update the course title in the UI
-                    setCourseTitle(newTitle);
-                })
-                .catch(err => {
-                    console.error("Error updating course:", err);
-                    // Revert to the original title in case of error
-                    if (titleRef.current) {
-                        titleRef.current.textContent = courseTitle;
-                    }
-                });
-
+            updateCourseMetadata({ name: newTitle, unlock_cost: unlockCost });
             setIsCourseTitleEditing(false);
         }
     };
@@ -1974,6 +2045,19 @@ export default function CreateCourse() {
                             )}
 
                             <div className="flex items-center space-x-3 ml-auto">
+                                {isCourseTitleEditing && (
+                                    <div className="flex items-center mr-4 bg-gray-50 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-1.5 transition-all">
+                                        <Zap size={14} className="text-yellow-500 mr-2" />
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-2 uppercase tracking-wider">Unlock Cost:</span>
+                                        <input
+                                            type="number"
+                                            value={unlockCost}
+                                            onChange={(e) => setUnlockCost(parseInt(e.target.value) || 0)}
+                                            className="w-16 bg-transparent border-none outline-none text-sm font-bold text-black dark:text-white"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                )}
                                 {isCourseTitleEditing ? (
                                     <>
                                         <button
@@ -2078,6 +2162,7 @@ export default function CreateCourse() {
                             schoolId={schoolId}
                             courseId={courseId}
                             onDuplicateItem={handleDuplicateItem}
+                            onUpdateModuleDifficulty={updateModuleDifficulty}
                         />
                     </div>
 

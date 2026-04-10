@@ -130,11 +130,11 @@ async def calculate_milestone_unlock_dates(
 
 
 async def get_courses_for_cohort(
-    cohort_id: int, include_tree: bool = False, joined_at: datetime | None = None
+    cohort_id: int, include_tree: bool = False, joined_at: datetime | None = None, user_id: int | None = None
 ):
     courses = await execute_db_operation(
         f"""
-        SELECT c.id, c.name, cc.is_drip_enabled, cc.frequency_value, cc.frequency_unit, cc.publish_at
+        SELECT c.id, c.name, cc.is_drip_enabled, cc.frequency_value, cc.frequency_unit, cc.publish_at, c.unlock_cost
         FROM {courses_table_name} c
         JOIN {course_cohorts_table_name} cc ON c.id = cc.course_id
         WHERE cc.cohort_id = ? AND c.deleted_at IS NULL AND cc.deleted_at IS NULL
@@ -142,31 +142,41 @@ async def get_courses_for_cohort(
         (cohort_id,),
         fetch_all=True,
     )
-    courses = [
-        {
+    
+    # Fetch unlocked courses for this user
+    # user_id is passed as an argument, no need to overwrite with None
+    unlocked_courses = []
+    if joined_at: # This usually implies we are in a user context
+        # We need a way to pass user_id here or fetch it. 
+        # For now, let's assume we fetch it from the caller or just return unlock_cost
+        pass
+
+    courses_list = []
+    for course in courses:
+        courses_list.append({
             "id": course[0],
             "name": course[1],
+            "unlock_cost": course[6],
+            "is_locked": False, # Default to False, will be updated in get_course or by caller
             "drip_config": {
                 "is_drip_enabled": course[2],
                 "frequency_value": course[3],
                 "frequency_unit": course[4],
                 "publish_at": course[5],
             },
-        }
-        for course in courses
-    ]
-
+        })
+    
     if not include_tree:
-        return courses
+        return courses_list
 
-    for index, course in enumerate(courses):
-        course_details = await get_course(course["id"])
+    for index, course in enumerate(courses_list):
+        course_details = await get_course(course["id"], user_id=user_id)
         course_details = await calculate_milestone_unlock_dates(
             course_details, course["drip_config"], joined_at
         )
-        courses[index] = course_details
+        courses_list[index] = course_details
 
-    return courses
+    return courses_list
 
 
 async def store_course_generation_request(course_id: int, job_details: Dict) -> str:
@@ -207,9 +217,9 @@ async def get_course_generation_job_details(job_uuid: str) -> Dict:
         return json.loads(job[0])
 
 
-async def get_course(course_id: int, only_published: bool = True) -> Dict:
+async def get_course(course_id: int, only_published: bool = True, user_id: int = None) -> Dict:
     course = await execute_db_operation(
-        f"SELECT c.id, c.name, cgj.status as course_generation_status FROM {courses_table_name} c LEFT JOIN {course_generation_jobs_table_name} cgj ON c.id = cgj.course_id WHERE c.id = ? AND c.deleted_at IS NULL",
+        f"SELECT c.id, c.name, cgj.status as course_generation_status, c.unlock_cost FROM {courses_table_name} c LEFT JOIN {course_generation_jobs_table_name} cgj ON c.id = cgj.course_id WHERE c.id = ? AND c.deleted_at IS NULL",
         (course_id,),
         fetch_one=True,
     )
@@ -217,9 +227,21 @@ async def get_course(course_id: int, only_published: bool = True) -> Dict:
     if not course:
         return None
 
+    is_locked = False
+    unlock_cost = course[3] or 0
+    if user_id and unlock_cost > 0:
+        # Check if user has unlocked it
+        unlocked = await execute_db_operation(
+            "SELECT 1 FROM user_unlocked_courses WHERE user_id = ? AND course_id = ?",
+            (user_id, course_id),
+            fetch_one=True
+        )
+        if not unlocked:
+            is_locked = True
+
     # Fix the milestones query to match the actual schema
     milestones = await execute_db_operation(
-        f"""SELECT m.id, m.name, m.color, cm.ordering 
+        f"""SELECT m.id, m.name, m.color, cm.ordering, m.difficulty
             FROM {course_milestones_table_name} cm
             JOIN milestones m ON cm.milestone_id = m.id
             WHERE cm.course_id = ? AND cm.deleted_at IS NULL AND m.deleted_at IS NULL ORDER BY cm.ordering""",
@@ -272,6 +294,8 @@ async def get_course(course_id: int, only_published: bool = True) -> Dict:
         "id": course[0],
         "name": course[1],
         "course_generation_status": course[2],
+        "unlock_cost": unlock_cost,
+        "is_locked": is_locked
     }
     course_dict["milestones"] = []
 
@@ -282,6 +306,7 @@ async def get_course(course_id: int, only_published: bool = True) -> Dict:
             "name": milestone[1],
             "color": milestone[2],
             "ordering": milestone[3],
+            "difficulty": milestone[4],
             "tasks": tasks_by_milestone.get(milestone_id, []),
         }
         course_dict["milestones"].append(milestone_dict)
@@ -740,7 +765,7 @@ async def swap_task_ordering_for_course(course_id: int, task_1_id: int, task_2_i
     )
 
 
-async def create_course(name: str, org_id: int) -> int:
+async def create_course(name: str, org_id: int, unlock_cost: int = 0) -> int:
     org = await get_org_by_id(org_id)
 
     if not org:
@@ -748,10 +773,10 @@ async def create_course(name: str, org_id: int) -> int:
 
     course_id = await execute_db_operation(
         f"""
-        INSERT INTO {courses_table_name} (name, org_id)
-        VALUES (?, ?)
+        INSERT INTO {courses_table_name} (name, org_id, unlock_cost)
+        VALUES (?, ?, ?)
         """,
-        (name, org_id),
+        (name, org_id, unlock_cost),
         get_last_row_id=True,
     )
 
@@ -789,11 +814,68 @@ async def get_course_org_id(course_id: int) -> int:
     return course[0]
 
 
-async def update_course_name(course_id: int, name: str):
-    await execute_db_operation(
-        f"UPDATE {courses_table_name} SET name = ? WHERE id = ? AND deleted_at IS NULL",
-        (name, course_id),
+async def update_course(course_id: int, name: str = None, unlock_cost: int = None):
+    updates = []
+    params = []
+    if name is not None:
+        updates.append("name = ?")
+        params.append(name)
+    if unlock_cost is not None:
+        updates.append("unlock_cost = ?")
+        params.append(unlock_cost)
+    
+    if not updates:
+        return
+
+    params.append(course_id)
+    query = f"UPDATE {courses_table_name} SET {', '.join(updates)} WHERE id = ? AND deleted_at IS NULL"
+    await execute_db_operation(query, tuple(params))
+
+
+async def unlock_course(course_id: int, user_id: int) -> Dict:
+    # 1. Get course cost
+    course = await execute_db_operation(
+        f"SELECT unlock_cost FROM {courses_table_name} WHERE id = ?",
+        (course_id,),
+        fetch_one=True
     )
+    if not course:
+        raise ValueError("Course not found")
+    
+    cost = course[0] or 0
+    
+    # 2. Get user credits
+    from api.db.user import get_user_by_id
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise ValueError("User not found")
+    
+    current_credits = user.get("credits", 0)
+    
+    if current_credits < cost:
+        raise ValueError("Insufficient credits")
+    
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+        
+        # 3. Deduct credits
+        await cursor.execute(
+            f"UPDATE {users_table_name} SET credits = credits - ? WHERE id = ?",
+            (cost, user_id)
+        )
+        
+        # 4. Record unlock
+        await cursor.execute(
+            "INSERT INTO user_unlocked_courses (user_id, course_id) VALUES (?, ?)",
+            (user_id, course_id)
+        )
+        
+        await conn.commit()
+    
+    return {
+        "success": True,
+        "credits_remaining": current_credits - cost
+    }
 
 
 async def check_and_insert_missing_course_milestones(
@@ -997,12 +1079,21 @@ async def get_user_courses(user_id: int) -> List[Dict]:
             )
             course_row = await cursor.fetchone()
             if course_row:
-                course_dict = convert_course_db_to_dict(course_row)
-                course_dict["role"] = role  # Add user's role to the course dictionary
+                # Use get_course to ensure is_locked and milestones are calculated correctly
+                course_details = await get_course(course_id, user_id=user_id, only_published=True)
+                if course_details:
+                    course_dict = course_details
+                    course_dict["role"] = role  # Add user's role to the course dictionary
+                    # Add org object for UserCourse model compatibility
+                    course_dict["org"] = {
+                        "id": course_row[2],
+                        "name": course_row[3],
+                        "slug": course_row[4]
+                    }
 
-                if role in [group_role_learner, group_role_mentor]:
-                    course_dict["cohort_id"] = course_to_cohort[course_id]
+                    if role in [group_role_learner, group_role_mentor]:
+                        course_dict["cohort_id"] = course_to_cohort[course_id]
 
-                courses.append(course_dict)
+                    courses.append(course_dict)
 
         return courses

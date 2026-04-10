@@ -46,13 +46,13 @@ async def get_learning_material_tasks_for_course(
 
 @router.post("/", response_model=CreateDraftTaskResponse)
 async def create_draft_task_for_course(
-    request: CreateDraftTaskRequest,
+    data: CreateDraftTaskRequest,
 ) -> CreateDraftTaskResponse:
     id, _ = await create_draft_task_for_course_in_db(
-        request.title,
-        str(request.type),
-        request.course_id,
-        request.milestone_id,
+        data.title,
+        str(data.type),
+        data.course_id,
+        data.milestone_id,
     )
     return {"id": id}
 
@@ -157,8 +157,11 @@ async def get_task(task_id: int) -> LearningMaterialTask | QuizTask | Assignment
 
 @router.post("/{task_id}/complete")
 async def mark_task_completed(task_id: int, request: MarkTaskCompletedRequest):
-    await mark_task_completed_in_db(task_id, request.user_id)
-    return {"success": True}
+    credits_earned = await mark_task_completed_in_db(task_id, request.user_id)
+    return {
+        "success": True,
+        "credits_earned": credits_earned
+    }
 
 
 @router.post("/{task_id}/assignment", response_model=AssignmentTask)
