@@ -7,6 +7,9 @@ import { useAuth } from "@/lib/auth";
 import { Course, Cohort } from "@/types";
 import { ChevronDown } from "lucide-react";
 import MobileDropdown, { DropdownOption } from "./MobileDropdown";
+import confetti from "canvas-confetti";
+import { unlockCourse } from "@/lib/api";
+import { Lock, Coins, Sparkles, Info } from "lucide-react";
 
 // Constants for localStorage keys
 const LAST_INCREMENT_DATE_KEY = 'streak_last_increment_date';
@@ -70,6 +73,11 @@ export default function LearnerCohortView({
     // State for the active mobile tab
     const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>(MobileTab.Course);
 
+    // Credit System State
+    const [userCredits, setUserCredits] = useState<number>(0);
+    const [isUnlocking, setIsUnlocking] = useState<boolean>(false);
+    const [selectedCourseToUnlock, setSelectedCourseToUnlock] = useState<Course | null>(null);
+
     // Refs for course tab scrolling functionality
     const courseTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
     const isInitialCourseLoad = useRef(true);
@@ -113,6 +121,13 @@ export default function LearnerCohortView({
     // Get user from auth context
     const { user } = useAuth();
     const userId = user?.id || '';
+
+    // Initialize credits from user object
+    useEffect(() => {
+        if (user?.credits !== undefined) {
+            setUserCredits(user.credits);
+        }
+    }, [user?.credits]);
 
     // Use refs for last increment tracking to avoid dependency cycles
     const lastIncrementDateRef = useRef<string | null>(null);
@@ -274,12 +289,53 @@ export default function LearnerCohortView({
         });
 
         // If a question was completed, check for streak update after a small delay
-        if (isComplete && !isStreakIncrementedToday()) {
-            setTimeout(() => {
-                fetchStreakData();
-            }, 500);
+        if (isComplete) {
+            // Award celebratory feedback if credits were earned
+            // Note: In a real scenario, we'd get this from the API response
+            // For now, we'll trigger effects on any completion
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#00ffcc', '#0099ff', '#ffffff']
+            });
+
+            if (!isStreakIncrementedToday()) {
+                setTimeout(() => {
+                    fetchStreakData();
+                }, 500);
+            }
         }
     }, [fetchStreakData, isStreakIncrementedToday]);
+
+    // Handler for course unlocking
+    const handleUnlockCourse = async () => {
+        if (!selectedCourseToUnlock || !userId) return;
+
+        setIsUnlocking(true);
+        try {
+            const result = await unlockCourse(selectedCourseToUnlock.id, Number(userId));
+            if (result.success) {
+                setUserCredits(result.credits_remaining);
+                confetti({
+                    particleCount: 150,
+                    spread: 100,
+                    origin: { y: 0.5 },
+                    colors: ['#FFD700', '#FFA500', '#ffffff']
+                });
+                
+                // Refresh courses to update lock status
+                // In a real app we might just update the local state
+                window.location.reload(); 
+            }
+        } catch (error: any) {
+            console.error("Unlock failed:", error);
+            alert(error.message || "Failed to unlock course. Not enough credits?");
+        } finally {
+            setIsUnlocking(false);
+            setSelectedCourseToUnlock(null);
+        }
+    };
 
     // Determine if sidebar should be shown
     const showSidebar = cohortId ? true : false;
@@ -338,6 +394,7 @@ export default function LearnerCohortView({
     }, []);
 
     return (
+        <>
         <div className="bg-white dark:bg-black min-h-screen pb-16 lg:pb-0" role="main">
             {courseTitle && (
                 <h1 className="text-2xl md:text-3xl font-light mb-4 md:mb-6 px-1 sm:px-0 text-black dark:text-white">
@@ -361,10 +418,21 @@ export default function LearnerCohortView({
                                                 ? 'text-black dark:text-white font-light'
                                                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-light'
                                                 }`}
-                                            onClick={() => handleCourseSelect(index)}
+                                            onClick={() => {
+                                                if (course.is_locked) {
+                                                    setSelectedCourseToUnlock(course);
+                                                } else {
+                                                    handleCourseSelect(index);
+                                                }
+                                            }}
                                             ref={el => { courseTabRefs.current[index] = el; }}
                                         >
-                                            <span className="relative z-10">{course.name}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="relative z-10">{course.name}</span>
+                                                {course.is_locked && (
+                                                    <Lock size={14} className="text-gray-400 group-hover:text-amber-500 transition-colors" />
+                                                )}
+                                            </div>
 
                                             {/* Active indicator - visible only for active tab */}
                                             {index === activeCourseIndex && (
@@ -429,9 +497,29 @@ export default function LearnerCohortView({
                     </div>
                 </div>
 
-                {/* Right Column: Streak and Performers */}
+                {/* Right Column: Streak, Credits and Performers */}
                 {showSidebar && (
                     <div className={`w-full lg:w-1/3 space-y-6 mt-6 lg:mt-0 ${activeMobileTab === MobileTab.Course ? 'hidden lg:block' : ''}`}>
+                        {/* Credits Balance Display */}
+                        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#111] to-[#000] border border-gray-800 shadow-2xl overflow-hidden relative group">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <Sparkles size={60} className="text-amber-400" />
+                            </div>
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                    <Coins className="text-amber-500" size={20} />
+                                </div>
+                                <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Credit Balance</h3>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                                <span className="text-4xl font-light text-white tracking-tighter">{userCredits}</span>
+                                <span className="text-xs text-amber-500 font-medium bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">CREDITS</span>
+                            </div>
+                            <p className="mt-4 text-xs text-gray-500 leading-relaxed italic">
+                                Complete tasks to earn more credits and unlock advanced courses.
+                            </p>
+                        </div>
+
                         {/* Streak component when not loading and cohort ID exists */}
                         {!isLoadingStreak && cohortId && (
                             <LearningStreak
@@ -485,5 +573,78 @@ export default function LearnerCohortView({
                 </div>
             )}
         </div>
+        
+        {/* Unlock Course Modal */}
+        {selectedCourseToUnlock && (() => {
+            const course = selectedCourseToUnlock;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="w-full max-w-md bg-[#0f0f0f] border border-gray-800 rounded-3xl p-8 shadow-2xl transform animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                        <div className="flex justify-center mb-6">
+                            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+                                <Lock size={32} className="text-amber-500" />
+                            </div>
+                        </div>
+                        
+                        <h2 className="text-2xl font-light text-center text-white mb-2">Unlock Advanced Course</h2>
+                        <p className="text-gray-400 text-center mb-8 font-light">
+                            Unlock <span className="text-white font-medium">{course.name}</span> to continue your learning journey.
+                        </p>
+                        
+                        <div className="space-y-4 mb-8">
+                            <div className="flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
+                                <span className="text-gray-400">Unlock Cost</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl font-medium text-white">{course.unlock_cost}</span>
+                                    <Coins size={16} className="text-amber-500" />
+                                </div>
+                            </div>
+                            <div className="flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
+                                <span className="text-gray-400">Your Credits</span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-xl font-medium ${userCredits >= (course.unlock_cost || 0) ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        {userCredits}
+                                    </span>
+                                    <Coins size={16} className="text-amber-500" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {userCredits < (course.unlock_cost || 0) ? (
+                            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm mb-6 flex items-start gap-3">
+                                <Info size={16} className="mt-0.5 flex-shrink-0" />
+                                <p>You need { (course.unlock_cost || 0) - userCredits } more credits to unlock this course. Keep completing tasks!</p>
+                            </div>
+                        ) : null}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setSelectedCourseToUnlock(null)}
+                                className="flex-1 py-4 px-6 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                disabled={isUnlocking || userCredits < (course.unlock_cost || 0)}
+                                onClick={handleUnlockCourse}
+                                className={`flex-1 py-4 px-6 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 
+                                    ${userCredits < (course.unlock_cost || 0) 
+                                        ? 'bg-gray-800 text-gray-500 cursor-not-allowed' 
+                                        : 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20 active:scale-95'}`}
+                            >
+                                {isUnlocking ? (
+                                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                ) : (
+                                    <>
+                                        Unlock Now
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        })()}
+        </>
     );
-} 
+}

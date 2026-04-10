@@ -318,3 +318,29 @@ export const addModule = async (courseId: string, schoolId: string, modules: Mod
       setActiveModuleId(newModule.id);
   }
 };
+
+/**
+ * Unlocks a course for a user by spending credits
+ * @param courseId - The ID of the course to unlock
+ * @param userId - The ID of the user unlocking the course
+ * @returns Success status and remaining credits
+ */
+export const unlockCourse = async (courseId: number, userId: number): Promise<{
+    success: boolean,
+    credits_remaining: number
+}> => {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/courses/${courseId}/unlock`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ user_id: userId }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "Failed to unlock course" }));
+        throw new Error(errorData.detail || "Failed to unlock course");
+    }
+
+    return await response.json();
+};

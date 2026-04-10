@@ -85,6 +85,7 @@ async def create_users_table(cursor):
                 middle_name TEXT,
                 last_name TEXT,
                 default_dp_color TEXT,
+                credits INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 deleted_at DATETIME
@@ -281,9 +282,10 @@ async def create_courses_table(cursor):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 org_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
+                unlock_cost INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                deleted_at DATETIME,
+                deleted_at DATETIME
                 FOREIGN KEY (org_id) REFERENCES {organizations_table_name}(id) ON DELETE CASCADE
             )"""
     )
@@ -385,6 +387,7 @@ async def create_tasks_table(cursor):
                     blocks TEXT,
                     title TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    difficulty TEXT DEFAULT 'easy',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     deleted_at DATETIME,
@@ -647,6 +650,20 @@ async def create_code_drafts_table(cursor):
     )
 
 
+async def create_user_unlocked_courses_table(cursor):
+    await cursor.execute(
+        f"""CREATE TABLE IF NOT EXISTS user_unlocked_courses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                course_id INTEGER NOT NULL,
+                unlocked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, course_id),
+                FOREIGN KEY (user_id) REFERENCES {users_table_name}(id) ON DELETE CASCADE,
+                FOREIGN KEY (course_id) REFERENCES {courses_table_name}(id) ON DELETE CASCADE
+            )"""
+    )
+
+
 async def init_db():
     # Ensure the database folder exists
     db_folder = os.path.dirname(sqlite_db_path)
@@ -709,6 +726,8 @@ async def init_db():
             await create_assignment_table(cursor)
 
             await create_bq_sync_table(cursor)
+
+            await create_user_unlocked_courses_table(cursor)
 
             await conn.commit()
 

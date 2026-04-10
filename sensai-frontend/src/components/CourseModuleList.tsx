@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronUp, ChevronDown, ChevronRight, ChevronDown as ChevronDownExpand, Plus, HelpCircle, Trash, Clipboard, Check, Loader2, Copy, FileText, Brain, BookOpen, PenSquare, FileQuestion, ClipboardList, Lock, Ban } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronRight, ChevronDown as ChevronDownExpand, Plus, HelpCircle, Trash, Clipboard, Check, Loader2, Copy, FileText, Brain, BookOpen, PenSquare, FileQuestion, ClipboardList, Lock, Ban, Layout } from "lucide-react";
 import { Module, ModuleItem, Quiz } from "@/types/course";
 import { QuizQuestion } from "@/types/quiz"; // Import from types instead
 import CourseItemDialog from "@/components/CourseItemDialog";
@@ -23,7 +23,8 @@ interface CourseModuleListProps {
     onMoveModuleUp?: (moduleId: string) => void;
     onMoveModuleDown?: (moduleId: string) => void;
     onDeleteModule?: (moduleId: string) => void;
-    onEditModuleTitle?: (moduleId: string) => void;
+    onEditModuleTitle?: (moduleId: string, newTitle?: string) => void;
+    onUpdateModuleDifficulty?: (moduleId: string, difficulty: 'easy' | 'medium' | 'hard') => void;
     expandedModules?: Record<string, boolean>; // For learner view
     saveModuleTitle?: (moduleId: string) => void; // Function to save module title
     cancelModuleEditing?: (moduleId: string) => void; // Function to cancel module title editing
@@ -67,6 +68,7 @@ export default function CourseModuleList({
     onMoveModuleDown,
     onDeleteModule,
     onEditModuleTitle,
+    onUpdateModuleDifficulty,
     expandedModules = {},
     saveModuleTitle = () => { }, // Default empty function
     cancelModuleEditing = () => { }, // Default empty function
@@ -719,16 +721,39 @@ export default function CourseModuleList({
                                     </button>
                                     <div className="flex-1 mr-2 sm:mr-4">
                                         {mode === 'edit' && module.isEditing ? (
-                                            <h2
-                                                contentEditable
-                                                suppressContentEditableWarning
-                                                className="text-lg sm:text-xl font-light text-black dark:text-white outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-gray-500 dark:empty:before:text-gray-400 empty:before:pointer-events-none"
-                                                data-module-id={module.id}
-                                                data-placeholder="New Module"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                {module.title}
-                                            </h2>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg bg-gray-50 dark:bg-white/5`}>
+                                                    <Layout size={20} className="text-gray-600 dark:text-gray-400" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <input
+                                                            type="text"
+                                                            value={module.title}
+                                                            onChange={(e) => onEditModuleTitle && onEditModuleTitle(module.id, e.target.value)}
+                                                            className="flex-1 text-lg font-light outline-none bg-transparent border-b border-gray-300 dark:border-white/10 focus:border-purple-500 transition-colors"
+                                                            placeholder="Module Title"
+                                                            autoFocus
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        />
+                                                        {/* Difficulty Selector */}
+                                                        <select
+                                                            value={module.difficulty || 'easy'}
+                                                            onChange={(e) => {
+                                                                if (onUpdateModuleDifficulty) {
+                                                                    onUpdateModuleDifficulty(module.id, e.target.value as 'easy' | 'medium' | 'hard');
+                                                                }
+                                                            }}
+                                                            className="text-xs font-medium px-2 py-1 rounded bg-gray-100 dark:bg-white/10 border-none outline-none cursor-pointer"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <option value="easy">Easy</option>
+                                                            <option value="medium">Medium</option>
+                                                            <option value="hard">Hard</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         ) : (
                                             <div className="flex items-center">
                                                 <h2

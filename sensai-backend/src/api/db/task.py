@@ -765,18 +765,48 @@ async def get_solved_tasks_for_user(
     return [task[0] for task in results]
 
 
-async def mark_task_completed(task_id: int, user_id: int):
-    # Update task completion table using INSERT OR IGNORE to handle duplicates gracefully
-    await execute_db_operation(
-        f"""
-        INSERT INTO {task_completions_table_name} (user_id, task_id)
-        VALUES (?, ?)
-        ON CONFLICT(user_id, task_id) DO UPDATE SET
-            deleted_at = NULL,
-            updated_at = CURRENT_TIMESTAMP
-        """,
-        (user_id, task_id),
+async def mark_task_completed(task_id: int, user_id: int) -> int:
+    # 1. Fetch task difficulty
+    task = await execute_db_operation(
+        f"SELECT difficulty FROM {tasks_table_name} WHERE id = ?",
+        (task_id,),
+        fetch_one=True
     )
+    
+    difficulty = task[0] if task else "easy"
+    
+    # 2. Map difficulty to credits
+    credit_map = {
+        "easy": 10,
+        "medium": 30,
+        "hard": 50
+    }
+    credits_to_add = credit_map.get(difficulty.lower(), 10)
+
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+        
+        # 3. Update task completion table
+        await cursor.execute(
+            f"""
+            INSERT INTO {task_completions_table_name} (user_id, task_id)
+            VALUES (?, ?)
+            ON CONFLICT(user_id, task_id) DO UPDATE SET
+                deleted_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (user_id, task_id),
+        )
+        
+        # 4. Award credits to user
+        await cursor.execute(
+            f"UPDATE {users_table_name} SET credits = credits + ? WHERE id = ?",
+            (credits_to_add, user_id)
+        )
+        
+        await conn.commit()
+        
+    return credits_to_add
 
 
 async def delete_completion_history_for_task(

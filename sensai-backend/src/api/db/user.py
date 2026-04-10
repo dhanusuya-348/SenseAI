@@ -119,7 +119,8 @@ def convert_user_db_to_dict(user: Tuple) -> Dict:
         "middle_name": user[3],
         "last_name": user[4],
         "default_dp_color": user[5],
-        "created_at": user[6],
+        "credits": user[6],
+        "created_at": user[7],
     }
 
 

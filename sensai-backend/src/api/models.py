@@ -159,6 +159,7 @@ class AddCoursesToCohortRequest(BaseModel):
 class CreateCourseRequest(BaseModel):
     name: str
     org_id: int
+    unlock_cost: Optional[int] = 0
 
 
 class CreateCourseResponse(BaseModel):
@@ -168,6 +169,8 @@ class CreateCourseResponse(BaseModel):
 class Course(BaseModel):
     id: int
     name: str
+    unlock_cost: Optional[int] = 0
+    is_locked: Optional[bool] = False
 
 
 class CourseCohort(Course):
@@ -184,6 +187,7 @@ class Milestone(BaseModel):
     color: Optional[str] = None
     ordering: Optional[int] = None
     unlock_at: Optional[datetime] = None
+    difficulty: Optional[str] = "easy"
 
 
 class TaskType(Enum):
@@ -223,6 +227,7 @@ class Task(BaseModel):
     title: str
     type: TaskType
     status: TaskStatus
+    difficulty: Optional[str] = "easy"
     scheduled_publish_at: datetime | None
 
 
@@ -421,6 +426,7 @@ class MilestoneTask(Task):
     ordering: int
     num_questions: int | None
     is_generating: Optional[bool] = False
+    difficulty: Optional[str] = "easy"
 
 
 class MilestoneTaskWithDetails(MilestoneTask):
@@ -484,8 +490,9 @@ class RemoveCourseFromCohortsRequest(BaseModel):
     cohort_ids: List[int]
 
 
-class UpdateCourseNameRequest(BaseModel):
-    name: str
+class UpdateCourseRequest(BaseModel):
+    name: Optional[str] = None
+    unlock_cost: Optional[int] = None
 
 
 class ChatRole(str, Enum):
@@ -529,6 +536,7 @@ class User(BaseModel):
     first_name: str | None
     middle_name: str | None
     last_name: str | None
+    credits: Optional[int] = 0
 
 
 class UserStreak(BaseModel):
@@ -665,6 +673,13 @@ class UpdateTaskOrdersRequest(BaseModel):
 class AddMilestoneToCourseRequest(BaseModel):
     name: str
     color: str
+    difficulty: Optional[str] = "easy"
+
+
+class UpdateMilestoneRequest(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    difficulty: Optional[str] = None
 
 
 class AddMilestoneToCourseResponse(BaseModel):
@@ -798,4 +813,13 @@ class CreateIntegrationRequest(BaseModel):
 class UpdateIntegrationRequest(BaseModel):
     access_token: str | None = None
     refresh_token: str | None = None
+
+
+class UnlockCourseRequest(BaseModel):
+    user_id: int
+
+
+class UnlockCourseResponse(BaseModel):
+    success: bool
+    credits_remaining: int
     expires_at: datetime | None = None

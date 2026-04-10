@@ -19,7 +19,12 @@ async def get_all_milestones_for_org(org_id: int) -> List[Dict]:
 
 @router.put("/{milestone_id}")
 async def update_milestone(milestone_id: int, request: UpdateMilestoneRequest):
-    await update_milestone_in_db(milestone_id, request.name)
+    await update_milestone_in_db(
+        milestone_id, 
+        name=request.name, 
+        color=request.color, 
+        difficulty=request.difficulty
+    )
     return {"message": "Milestone updated"}
 
 

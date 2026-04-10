@@ -8,6 +8,7 @@ export interface LearningMaterial {
   status?: string; // Add status field to track draft/published state
   scheduled_publish_at: string | null;
   isGenerating?: boolean;
+  difficulty?: 'easy' | 'medium' | 'hard';
 }
 
 export interface Quiz {
@@ -20,6 +21,7 @@ export interface Quiz {
   status?: string; // Add status field to track draft/published state
   scheduled_publish_at: string | null;
   isGenerating?: boolean;
+  difficulty?: 'easy' | 'medium' | 'hard';
 }
 
 export interface Assignment {
@@ -30,6 +32,7 @@ export interface Assignment {
   status?: string;
   scheduled_publish_at: string | null;
   isGenerating?: boolean;
+  difficulty?: 'easy' | 'medium' | 'hard';
 }
 
 export type ModuleItem = LearningMaterial | Quiz | Assignment;
@@ -44,6 +47,7 @@ export interface Module {
   isEditing?: boolean;
   progress?: number;
   unlockAt?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
 }
 
 export interface CourseDetails {

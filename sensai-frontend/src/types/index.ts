@@ -13,6 +13,7 @@ export interface Member {
     first_name: string;
     middle_name: string;
     last_name: string;
+    credits?: number;
 }
 
 export interface CohortMember extends Member {
@@ -20,12 +21,14 @@ export interface CohortMember extends Member {
 }
 
 export interface TeamMember extends Member {
-    role: 'owner' | 'admin';  // Updated roles as per requirement
+    role: 'owner' | 'admin';
 }
 
 export interface Course {
     id: number;
     name: string;
+    unlock_cost?: number;
+    is_locked?: boolean;
 }
 
 export interface Cohort {

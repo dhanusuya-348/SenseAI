@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List, Optional
 from api.utils.db import execute_db_operation, execute_multiple_db_operations
 from api.config import (
     milestones_table_name,
@@ -12,24 +12,26 @@ from api.config import (
 
 
 def convert_milestone_db_to_dict(milestone: Tuple) -> Dict:
-    return {"id": milestone[0], "name": milestone[1], "color": milestone[2]}
+    return {
+        "id": milestone[0], 
+        "name": milestone[1], 
+        "color": milestone[2],
+        "difficulty": milestone[3] if len(milestone) > 3 else "easy"
+    }
 
 
 async def get_all_milestones():
     milestones = await execute_db_operation(
-        f"SELECT id, name, color FROM {milestones_table_name} WHERE deleted_at IS NULL",
+        f"SELECT id, name, color, difficulty FROM {milestones_table_name} WHERE deleted_at IS NULL",
         fetch_all=True,
     )
 
     return [convert_milestone_db_to_dict(milestone) for milestone in milestones]
 
 
-execute_db_operation
-
-
 async def get_all_milestones_for_org(org_id: int):
     milestones = await execute_db_operation(
-        f"SELECT id, name, color FROM {milestones_table_name} WHERE org_id = ? AND deleted_at IS NULL",
+        f"SELECT id, name, color, difficulty FROM {milestones_table_name} WHERE org_id = ? AND deleted_at IS NULL",
         (org_id,),
         fetch_all=True,
     )
@@ -37,11 +39,48 @@ async def get_all_milestones_for_org(org_id: int):
     return [convert_milestone_db_to_dict(milestone) for milestone in milestones]
 
 
-async def update_milestone(milestone_id: int, name: str):
-    await execute_db_operation(
-        f"UPDATE {milestones_table_name} SET name = ? WHERE id = ? AND deleted_at IS NULL",
-        (name, milestone_id),
-    )
+async def update_milestone(
+    milestone_id: int,
+    name: str | None = None,
+    color: str | None = None,
+    difficulty: str | None = None,
+):
+    updates = []
+    params = []
+    if name is not None:
+        updates.append("name = ?")
+        params.append(name)
+    if color is not None:
+        updates.append("color = ?")
+        params.append(color)
+    if difficulty is not None:
+        updates.append("difficulty = ?")
+        params.append(difficulty)
+
+    if not updates:
+        return
+
+    params.append(milestone_id)
+    query = f"UPDATE {milestones_table_name} SET {', '.join(updates)} WHERE id = ? AND deleted_at IS NULL"
+
+    # If difficulty is changing, update all tasks in this milestone
+    operations = [(query, tuple(params))]
+    if difficulty is not None:
+        operations.append(
+            (
+                f"""
+                UPDATE {tasks_table_name} 
+                SET difficulty = ? 
+                WHERE id IN (
+                    SELECT task_id FROM {course_tasks_table_name} 
+                    WHERE milestone_id = ? AND deleted_at IS NULL
+                )
+                """,
+                (difficulty, milestone_id),
+            )
+        )
+
+    await execute_multiple_db_operations(operations)
 
 
 async def delete_milestone(milestone_id: int):

@@ -132,9 +132,9 @@ async def remove_courses_from_cohort(
     response_model=List[CourseWithMilestonesAndTasks | CohortCourse],
 )
 async def get_courses_for_cohort(
-    cohort_id: int, include_tree: bool = False, joined_at: datetime | None = None
+    cohort_id: int, include_tree: bool = False, joined_at: datetime | None = None, user_id: int | None = None
 ) -> List[CourseWithMilestonesAndTasks | CohortCourse]:
-    return await get_courses_for_cohort_from_db(cohort_id, include_tree, joined_at)
+    return await get_courses_for_cohort_from_db(cohort_id, include_tree, joined_at, user_id)
 
 
 @router.get(
