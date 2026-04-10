@@ -1,6 +1,6 @@
 from typing import Optional, Type, Literal
 import backoff
-from langfuse.openai import AsyncOpenAI
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 from pydantic import create_model
 from pydantic.fields import FieldInfo
