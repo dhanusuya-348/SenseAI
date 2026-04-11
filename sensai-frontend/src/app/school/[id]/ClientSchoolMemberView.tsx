@@ -76,8 +76,11 @@ export default function ClientSchoolMemberView({ slug }: { slug: string }) {
 
             setLoading(true);
             try {
-                // Fetch basic school info using slug
-                const schoolResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/organizations/slug/${slug}`);
+                // Try to fetch by ID if numeric, otherwise by slug
+                const isNumeric = /^\d+$/.test(slug);
+                const endpoint = isNumeric ? slug : `slug/${slug}`;
+                const schoolResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/organizations/${endpoint}`);
+                
                 if (!schoolResponse.ok) {
                     throw new Error(`API error: ${schoolResponse.status}`);
                 }

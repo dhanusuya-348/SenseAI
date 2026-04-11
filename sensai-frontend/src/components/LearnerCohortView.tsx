@@ -134,6 +134,16 @@ export default function LearnerCohortView({
             setUserCredits(user.credits);
         }
     }, [user?.credits]);
+    
+    // Dispatch event to update global header whenever local userCredits changes
+    // Doing this in a useEffect ensures side effects happen AFTER render
+    useEffect(() => {
+        if (userCredits !== undefined && userCredits !== null) {
+            window.dispatchEvent(new CustomEvent('user-credits-updated', { 
+                detail: { credits: userCredits } 
+            }));
+        }
+    }, [userCredits]);
 
     // Use refs for last increment tracking to avoid dependency cycles
     const lastIncrementDateRef = useRef<string | null>(null);
@@ -270,14 +280,7 @@ export default function LearnerCohortView({
         // If credits were earned, show the popup and update balance
         if (creditsEarned > 0) {
             triggerCreditPopup(creditsEarned);
-            setUserCredits(prev => {
-                const newCredits = prev + creditsEarned;
-                // Dispatch event to update global header
-                window.dispatchEvent(new CustomEvent('user-credits-updated', { 
-                    detail: { credits: newCredits } 
-                }));
-                return newCredits;
-            });
+            setUserCredits(userCredits + creditsEarned);
         }
 
         // If a task was completed, check for streak update after a small delay
@@ -350,10 +353,6 @@ export default function LearnerCohortView({
             const result = await unlockModule(Number(selectedModuleToUnlock.id), Number(userId));
             if (result.success) {
                 setUserCredits(result.credits_remaining);
-                // Dispatch event to update global header
-                window.dispatchEvent(new CustomEvent('user-credits-updated', { 
-                    detail: { credits: result.credits_remaining } 
-                }));
                 confetti({
                     particleCount: 150,
                     spread: 100,

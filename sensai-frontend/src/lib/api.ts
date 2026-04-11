@@ -331,22 +331,49 @@ export const unlockModule = async (milestoneId: number, userId: number): Promise
     success: boolean,
     credits_remaining: number
 }> => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/milestones/${milestoneId}/unlock`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ user_id: userId }),
-    });
-
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: "Failed to unlock module" }));
-        throw new Error(errorData.detail || "Failed to unlock module");
+    // Basic validation to prevent malformed requests
+    if (!milestoneId || isNaN(milestoneId)) {
+        throw new Error("Invalid module ID");
+    }
+    if (!userId || isNaN(userId)) {
+        throw new Error("Invalid user ID");
     }
 
-    const data = await response.json();
-    return {
-        success: true,
-        credits_remaining: data.credits_remaining
-    };
+    const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8001';
+    // Ensure no trailing slash on baseUrl
+    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const url = `${cleanBaseUrl}/milestones/${milestoneId}/unlock`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ user_id: userId }),
+        });
+
+        if (!response.ok) {
+            // Try to get detailed error from backend
+            let errorDetail = "Failed to unlock module";
+            try {
+                const errorData = await response.json();
+                errorDetail = errorData.detail || errorDetail;
+            } catch (e) {
+                // Ignore parse error
+            }
+            throw new Error(errorDetail);
+        }
+
+        const data = await response.json();
+        return {
+            success: true,
+            credits_remaining: data.credits_remaining
+        };
+    } catch (error) {
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+            console.error(`Network error when calling ${url}. Is the backend running at ${cleanBaseUrl}?`);
+        }
+        throw error;
+    }
 };
