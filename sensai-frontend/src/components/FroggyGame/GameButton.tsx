@@ -2,15 +2,17 @@
 
 import React, { useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { Gamepad2 } from 'lucide-react';
 import GameSwitcher from '../RelaxationGames/GameSwitcher';
 
 const GameButton: React.FC = () => {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Filter paths: Show only on school pages, but not on admin/login pages
-  const isExcluded = pathname === '/' || pathname === '/login' || pathname.startsWith('/school/admin');
-  if (isExcluded) return null;
+  // Show only on the courses list page
+  const isCoursesPage = pathname.match(/^\/school\/[^/]+\/courses\/?$/);
+  
+  if (!isCoursesPage) return null;
 
   return (
     // Shifted slightly to the left (right-24) to avoid overlap with native mobile FAB
@@ -18,11 +20,10 @@ const GameButton: React.FC = () => {
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2 px-4 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-500/30 transform hover:scale-105 transition-all duration-300 group overflow-hidden border border-emerald-400/20"
+          className="flex items-center gap-2.5 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-500/20 transform hover:scale-105 transition-all duration-300 group border border-emerald-400/20 active:scale-95"
         >
-          <span className="text-xl group-hover:animate-bounce">✨</span>
-          <span className="font-semibold whitespace-nowrap">Take a Break</span>
-          <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+          <Gamepad2 size={20} className="group-hover:rotate-12 transition-transform duration-300" />
+          <span className="font-medium text-sm tracking-tight whitespace-nowrap">Take a Break</span>
         </button>
       ) : (
         <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300 z-[10000]">
