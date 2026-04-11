@@ -197,18 +197,14 @@ async def unlock_milestone(user_id: int, milestone_id: int):
         raise ValueError("Milestone not found")
 
     cost = milestone.get("unlock_cost", 0)
-    if cost <= 0:
-        return {"message": "Milestone is already free"}
-
+    
     # 2. Get user credits
     user = await get_user_by_id(user_id)
     if not user:
         raise ValueError("User not found")
 
     current_credits = user.get("credits", 0)
-    if current_credits < cost:
-        raise ValueError("Insufficient credits")
-
+    
     # 3. Check if already unlocked
     already_unlocked = await execute_db_operation(
         "SELECT 1 FROM user_unlocked_milestones WHERE user_id = ? AND milestone_id = ?",
@@ -216,7 +212,13 @@ async def unlock_milestone(user_id: int, milestone_id: int):
         fetch_one=True
     )
     if already_unlocked:
-        return {"message": "Milestone already unlocked"}
+        return {
+            "message": "Milestone already unlocked",
+            "credits_remaining": current_credits
+        }
+
+    if current_credits < cost:
+        raise ValueError("Insufficient credits")
 
     # 4. Deduct credits and record unlock in a transaction
     async with get_new_db_connection() as conn:

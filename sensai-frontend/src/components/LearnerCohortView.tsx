@@ -635,7 +635,7 @@ export default function LearnerCohortView({
                             <div className="flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
                                 <span className="text-gray-400">Unlock Cost</span>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xl font-medium text-white">{module.unlock_cost}</span>
+                                    <span className="text-xl font-medium text-white">{module.unlock_cost || 0}</span>
                                     <Coins size={16} className="text-amber-500" />
                                 </div>
                             </div>
@@ -650,10 +650,15 @@ export default function LearnerCohortView({
                             </div>
                         </div>
 
-                        {userCredits < (module.unlock_cost || 0) ? (
+                        {userCredits < (module.unlock_cost || 0) && (module.unlock_cost || 0) > 0 ? (
                             <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm mb-6 flex items-start gap-3">
                                 <Info size={16} className="mt-0.5 flex-shrink-0" />
                                 <p>You need { (module.unlock_cost || 0) - userCredits } more credits to unlock this module. Keep completing tasks!</p>
+                            </div>
+                        ) : (module.unlock_cost || 0) === 0 ? (
+                            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm mb-6 flex items-start gap-3">
+                                <Sparkles size={16} className="mt-0.5 flex-shrink-0" />
+                                <p>This module is free! Unlock it to start learning.</p>
                             </div>
                         ) : null}
 

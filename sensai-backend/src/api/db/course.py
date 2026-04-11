@@ -308,13 +308,15 @@ async def get_course(course_id: int, only_published: bool = True, user_id: int =
         m_admin_locked = bool(milestone[7]) if len(milestone) > 7 else False  # Admin-forced lock from DB
         m_is_locked = False
 
-        # Admin-forced lock takes priority over everything
-        if m_admin_locked:
+        # User unlock takes priority over admin lock
+        if milestone_id in unlocked_milestone_ids:
+            m_is_locked = False
+        # Admin-forced lock takes priority over default credit lock
+        elif m_admin_locked:
             m_is_locked = True
         elif user_id and m_unlock_cost > 0 and not m_is_free:
             # Credit-based lock: lock if user hasn't unlocked it
-            if milestone_id not in unlocked_milestone_ids:
-                m_is_locked = True
+            m_is_locked = True
 
         milestone_dict = {
             "id": milestone_id,

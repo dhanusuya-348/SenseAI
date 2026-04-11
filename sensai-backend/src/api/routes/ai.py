@@ -1,4 +1,5 @@
 import os
+import uuid
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import AsyncGenerator, Optional, Dict
@@ -12,6 +13,7 @@ from api.models import (
     TaskType,
     QuestionType,
 )
+from api.utils.logging import logger
 from api.llm import (
     run_llm_with_openai,
     stream_llm_with_openai,
@@ -248,23 +250,31 @@ async def get_model_for_task(
 
 
 def get_user_audio_message_for_chat_history(uuid: str) -> list[dict]:
-    if settings.s3_folder_name:
-        audio_data = download_file_from_s3_as_bytes(
-            get_media_upload_s3_key_from_uuid(uuid, "wav")
-        )
-    else:
-        with open(os.path.join(settings.local_upload_folder, f"{uuid}.wav"), "rb") as f:
-            audio_data = f.read()
+    try:
+        if settings.s3_folder_name:
+            audio_data = download_file_from_s3_as_bytes(
+                get_media_upload_s3_key_from_uuid(uuid, "wav")
+            )
+        else:
+            file_path = os.path.join(settings.local_upload_folder, f"{uuid}.wav")
+            if not os.path.exists(file_path):
+                logger.warning(f"Audio file not found: {file_path}")
+                return [{"role": "user", "content": "<audio message missing>"}]
+            with open(file_path, "rb") as f:
+                audio_data = f.read()
 
-    return [
-        {
-            "type": "input_audio",
-            "input_audio": {
-                "data": prepare_audio_input_for_ai(audio_data),
-                "format": "wav",
+        return [
+            {
+                "type": "input_audio",
+                "input_audio": {
+                    "data": prepare_audio_input_for_ai(audio_data),
+                    "format": "wav",
+                },
             },
-        },
-    ]
+        ]
+    except Exception as e:
+        logger.error(f"Error processing user audio message: {str(e)}")
+        return [{"role": "user", "content": "<error processing audio message>"}]
 
 
 def format_ai_scorecard_report(scorecard: list[dict]) -> str:
@@ -816,7 +826,11 @@ async def ai_response_for_assignment(request: AIChatRequest):
             submission_data = None
 
             if request.response_type == ChatResponseType.FILE:
-                submission_data = extract_submission_file(request.user_response)
+                try:
+                    submission_data = extract_submission_file(request.user_response)
+                except Exception as e:
+                    logger.error(f"Error extracting submission file: {str(e)}")
+                    submission_data = None
             else:
                 # Not a file upload, check chat history for latest file submission
                 latest_file_uuid = get_latest_file_uuid_from_chat_history(
@@ -824,7 +838,11 @@ async def ai_response_for_assignment(request: AIChatRequest):
                 )
 
                 if latest_file_uuid:
-                    submission_data = extract_submission_file(latest_file_uuid)
+                    try:
+                        submission_data = extract_submission_file(latest_file_uuid)
+                    except Exception as e:
+                        logger.error(f"Error extracting latest submission file: {str(e)}")
+                        submission_data = None
 
             # Build evaluation context
             evaluation_context = build_evaluation_context(evaluation_criteria)

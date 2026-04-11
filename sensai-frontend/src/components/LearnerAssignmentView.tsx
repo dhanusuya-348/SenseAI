@@ -517,7 +517,7 @@ export default function LearnerAssignmentView({
                     presigned_url = presignedData.presigned_url;
                     file_uuid = presignedData.file_uuid;
                 } catch {
-                    console.error("Error getting presigned URL");
+                    console.warn("Failed to get presigned URL, will try direct upload fallback");
                 }
 
                 // Convert base64 data to a Blob
@@ -580,10 +580,31 @@ export default function LearnerAssignmentView({
                         } else {
                             storageMessage.content = JSON.stringify({ file_uuid, filename: responseContent });
                         }
-                    } catch {
-                        throw new Error('Error uploading file to S3');
+                    } catch (error) {
+                        console.error('Error uploading file:', error);
+                        // If all upload methods failed, we should stop and notify the user
+                        const errorMessage = "Failed to upload your submission. Please check your connection and try again.";
+                        const errorResponse: ChatMessageLocal = {
+                            id: `ai-error-upload-${Date.now()}`,
+                            content: errorMessage,
+                            sender: 'ai',
+                            timestamp: new Date(),
+                            messageType: 'text',
+                            audioData: undefined,
+                            isError: true
+                        };
+                        setChatHistory(prev => [...prev, errorResponse]);
+                        setIsSubmitting(false);
+                        setIsAiResponding(false);
+                        return;
                     }
                 }
+            }
+
+            // Only proceed if we have a file_uuid for file/audio responses
+            if (((responseType === 'audio' && audioData) || (responseType === 'file' && fileData)) && !file_uuid) {
+                console.error("No file_uuid generated for submission");
+                return;
             }
 
             // handle file response for chat history
@@ -797,11 +818,24 @@ export default function LearnerAssignmentView({
                             }
                         } catch (error) {
                             const err = error as Error;
-                            console.error('assignment stream: processing error', { message: err?.message, stack: err?.stack });
-                            // Only reset the preparing report state when an error occurs
-                            // and we need to allow the user to try again
+                            // If the stream is interrupted or JSON is invalid, log but don't necessarily crash the UI if we already have some feedback
+                            console.error('assignment stream: processing error', err);
+                            
                             if (showPreparingReport) {
                                 setTimeout(() => setShowPreparingReport(false), 0);
+                            }
+
+                            // If we didn't get any feedback yet, show an error message
+                            if (!receivedAnyFeedback) {
+                                const errorResponse: ChatMessageLocal = {
+                                    id: `ai-error-stream-${Date.now()}`,
+                                    content: "There was a technical issue while processing the AI response. Please try again.",
+                                    sender: 'ai',
+                                    timestamp: new Date(),
+                                    messageType: 'text',
+                                    isError: true
+                                };
+                                setChatHistory(prev => [...prev, errorResponse]);
                             }
                         }
                     };

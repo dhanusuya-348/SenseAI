@@ -544,7 +544,7 @@ export default function CourseModuleList({
 
         // Prevent clicking on locked modules unless it's to unlock them
         if (module.is_locked) {
-            if (onUnlockModule && module.unlock_cost) {
+            if (onUnlockModule && (module.unlock_cost !== undefined && module.unlock_cost !== null)) {
                 onUnlockModule(module.id, module.unlock_cost);
             }
             return;
@@ -721,7 +721,7 @@ export default function CourseModuleList({
                                             e.stopPropagation();
                                             // Handle locked modules
                                             if (module.is_locked) {
-                                                if (onUnlockModule && module.unlock_cost) {
+                                                if (onUnlockModule && module.unlock_cost !== undefined && module.unlock_cost !== null) {
                                                     onUnlockModule(module.id, module.unlock_cost);
                                                 }
                                                 return;

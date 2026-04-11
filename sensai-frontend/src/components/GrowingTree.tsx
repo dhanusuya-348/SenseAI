@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { GrowthData } from '@/lib/growth';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 
 interface GrowingTreeProps {
@@ -24,15 +24,19 @@ export const GrowingTree: React.FC<GrowingTreeProps> = ({ data }) => {
         // Hardcode skills for the demonstration user or if list is empty
         if (data.skills.length === 0 || session?.user?.email === 'mohanapriya7114@gmail.com') {
             return [
-                { id: 101, name: "Python Architecture" },
-                { id: 102, name: "Neural Networks" },
-                { id: 103, name: "AI Ethics" },
-                { id: 104, name: "Distributed Systems" },
-                { id: 105, name: "Cloud Infrastructure" }
+                { id: 101, name: "Python Architecture", color: "#6366f1" }, // Indigo
+                { id: 102, name: "Neural Networks", color: "#ec4899" },    // Pink
+                { id: 103, name: "AI Ethics", color: "#14b8a6" },         // Teal
+                { id: 104, name: "Distributed Systems", color: "#f59e0b" }, // Amber
+                { id: 105, name: "Cloud Infrastructure", color: "#8b5cf6" }, // Violet
+                { id: 106, name: "Quantum Computing", color: "#3b82f6" },   // Blue
+                { id: 107, name: "Edge Computing", color: "#10b981" }       // Emerald
             ];
         }
         return data.skills;
     }, [data.skills, session?.user?.email]);
+
+    const [hoveredSkill, setHoveredSkill] = React.useState<any>(null);
 
     const stage = useMemo(() => {
         return [...STAGE_CONFIGS].reverse().find(s => data.credits >= s.threshold) || STAGE_CONFIGS[0];
@@ -77,7 +81,12 @@ export const GrowingTree: React.FC<GrowingTreeProps> = ({ data }) => {
                 stroke={branchColor}
                 strokeWidth={strokeWidth}
                 strokeLinecap="round"
-                className="animate-tree-sway cursor-help hover:stroke-white/40 transition-colors"
+                onMouseEnter={() => setHoveredSkill(skill)}
+                onMouseLeave={() => setHoveredSkill(null)}
+                className="animate-tree-sway cursor-help hover:stroke-white/80 transition-all duration-300"
+                style={{ 
+                    filter: hoveredSkill?.id === skill?.id ? "drop-shadow(0 0 8px currentColor)" : "none"
+                }}
             >
                 <title>{skill?.name || "The Foundation"}</title>
             </motion.line>
@@ -140,7 +149,9 @@ export const GrowingTree: React.FC<GrowingTreeProps> = ({ data }) => {
                         cy={y2 + 3}
                         r={6}
                         fill="#FF4D4D" // Vivid Red
-                        className="shadow-xl cursor-help"
+                        onMouseEnter={() => setHoveredSkill(skill)}
+                        onMouseLeave={() => setHoveredSkill(null)}
+                        className="shadow-xl cursor-help hover:scale-125 transition-transform"
                         style={{ filter: "drop-shadow(0 0 8px rgba(255, 77, 77, 0.4))" }}
                     >
                         <title>Fruit of {skill?.name}</title>
@@ -152,6 +163,34 @@ export const GrowingTree: React.FC<GrowingTreeProps> = ({ data }) => {
         // Recursive calls for sub-branches
         const subLength = length * (0.7 + Math.random() * 0.1);
         const subDepth = depth - 1;
+
+        if (subDepth === 0 && (stage.flowers || stage.fruits)) {
+            // Add falling petals for cinematic effect
+            for (let i = 0; i < 2; i++) {
+                branches.push(
+                    <motion.circle
+                        key={`petal-fall-${x2}-${y2}-${i}-${Math.random()}`}
+                        initial={{ opacity: 0, y: 0, x: 0 }}
+                        animate={{ 
+                            opacity: [0, 0.6, 0],
+                            y: [0, 200],
+                            x: [0, (Math.random() - 0.5) * 100],
+                            rotate: [0, 360]
+                        }}
+                        transition={{ 
+                            duration: 5 + Math.random() * 5, 
+                            repeat: Infinity,
+                            delay: Math.random() * 10 
+                        }}
+                        cx={x2}
+                        cy={y2}
+                        r={2 + Math.random() * 2}
+                        fill={stage.fruits ? "#FF4D4D40" : "#FFB7C540"}
+                        className="pointer-events-none"
+                    />
+                );
+            }
+        }
         
         branches.push(...drawTree(x2, y2, angle - (0.4 + Math.random() * 0.2), subLength, subDepth, skillIndex, maxDepth));
         branches.push(...drawTree(x2, y2, angle + (0.4 + Math.random() * 0.2), subLength, subDepth, skillIndex + 1, maxDepth));
@@ -189,23 +228,23 @@ export const GrowingTree: React.FC<GrowingTreeProps> = ({ data }) => {
                 ))}
             </div>
 
-            <div className="relative w-full max-w-[800px] aspect-square flex items-center justify-center p-4">
-                <svg width="100%" height="100%" viewBox="0 0 400 400" className="drop-shadow-2xl overflow-visible">
+            <div className="relative w-full h-full flex items-center justify-center p-0">
+                <svg width="100%" height="100%" viewBox="0 0 400 400" className="drop-shadow-[0_0_50px_rgba(16,185,129,0.2)] overflow-visible">
                     {/* Atmospheric Glow */}
                     <defs>
                         <radialGradient id="treeGlow" cx="50%" cy="50%" r="50%">
-                            <stop offset="0%" stopColor="rgba(16, 185, 129, 0.1)" />
+                            <stop offset="0%" stopColor="rgba(16, 185, 129, 0.15)" />
                             <stop offset="100%" stopColor="transparent" />
                         </radialGradient>
                     </defs>
-                    <circle cx="200" cy="250" r="150" fill="url(#treeGlow)" />
+                    <circle cx="200" cy="250" r="180" fill="url(#treeGlow)" />
 
                     {/* Ground with shadow */}
                     <motion.ellipse 
                         initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 0.4, scale: 1 }}
-                        cx="200" cy="385" rx="120" ry="15" 
-                        fill="#000" 
+                        animate={{ opacity: 0.5, scale: 1 }}
+                        cx="200" cy="385" rx="140" ry="12" 
+                        fill="rgba(0,0,0,0.6)" 
                     />
                     
                     {/* The Tree */}
@@ -219,26 +258,45 @@ export const GrowingTree: React.FC<GrowingTreeProps> = ({ data }) => {
                             <path d="M200 370 Q 205 340, 215 350" stroke="#10B981" strokeWidth="3" fill="none" strokeLinecap="round" />
                         </motion.g>
                     ) : (
-                        drawTree(200, 390, -Math.PI / 2, stage.branchLength, stage.levels, 0, stage.levels)
+                        drawTree(200, 390, -Math.PI / 2, stage.branchLength * 1.2, stage.levels, 0, stage.levels)
                     )}
                 </svg>
             </div>
             
+            {/* Skill Hover HUD */}
+            <AnimatePresence>
+                {hoveredSkill && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                        className="absolute top-24 left-1/2 -translate-x-1/2 z-[60] pointer-events-none"
+                    >
+                        <div className="bg-black/80 backdrop-blur-xl px-12 py-6 rounded-full border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)] flex flex-col items-center">
+                            <span className="text-[10px] text-white/40 font-bold uppercase tracking-[0.5em] mb-1">Skill Branch</span>
+                            <h2 className="text-4xl font-black text-white tracking-tighter" style={{ color: hoveredSkill.color || 'white' }}>
+                                {hoveredSkill.name}
+                            </h2>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Floating HUD Label - Repositioned to Bottom Right */}
             <motion.div 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 1 }}
-                className="absolute bottom-12 right-12 text-center pointer-events-none"
+                className="absolute bottom-12 right-12 text-center pointer-events-none z-50"
             >
-                <div className="bg-white/10 dark:bg-black/60 backdrop-blur-2xl px-8 py-5 rounded-[2.5rem] border border-white/20 shadow-2xl">
-                    <h3 className="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 drop-shadow-sm uppercase">
+                <div className="bg-white/10 dark:bg-black/60 backdrop-blur-2xl px-10 py-6 rounded-[3rem] border border-white/20 shadow-2xl">
+                    <h3 className="text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 drop-shadow-sm uppercase">
                         {stage.label}
                     </h3>
-                    <div className="flex items-center justify-center gap-4 mt-2">
-                        <span className="text-emerald-400/80 text-[10px] font-bold tracking-widest uppercase">Phase {stage.levels}</span>
-                        <div className="w-1 h-1 rounded-full bg-white/20" />
-                        <span className="text-white/60 text-[10px] font-medium tracking-tight whitespace-nowrap">{data.growth_days} Days of Evolution</span>
+                    <div className="flex items-center justify-center gap-6 mt-3">
+                        <span className="text-emerald-400 font-bold text-xs tracking-widest uppercase">Phase {stage.levels}</span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-white/30" />
+                        <span className="text-white/70 text-xs font-medium tracking-tight whitespace-nowrap">{data.growth_days} Days of Evolution</span>
                     </div>
                 </div>
             </motion.div>
