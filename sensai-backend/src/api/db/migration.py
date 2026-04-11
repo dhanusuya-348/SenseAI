@@ -232,4 +232,6 @@ async def cleanup_invalid_chat_history():
 
 
 async def run_migrations():
+    from api.db.migration_milestones import run_milestone_migration
+    await run_milestone_migration()
     await cleanup_invalid_chat_history()

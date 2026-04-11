@@ -16,13 +16,28 @@ def convert_milestone_db_to_dict(milestone: Tuple) -> Dict:
         "id": milestone[0], 
         "name": milestone[1], 
         "color": milestone[2],
-        "difficulty": milestone[3] if len(milestone) > 3 else "easy"
+        "difficulty": milestone[3] if len(milestone) > 3 else "easy",
+        "unlock_cost": milestone[4] if len(milestone) > 4 else 0,
+        "is_free": bool(milestone[5]) if len(milestone) > 5 else False
     }
+
+
+async def get_milestone(milestone_id: int) -> Dict:
+    milestone = await execute_db_operation(
+        f"SELECT id, name, color, difficulty, unlock_cost, is_free FROM {milestones_table_name} WHERE id = ? AND deleted_at IS NULL",
+        (milestone_id,),
+        fetch_one=True,
+    )
+
+    if not milestone:
+        return None
+
+    return convert_milestone_db_to_dict(milestone)
 
 
 async def get_all_milestones():
     milestones = await execute_db_operation(
-        f"SELECT id, name, color, difficulty FROM {milestones_table_name} WHERE deleted_at IS NULL",
+        f"SELECT id, name, color, difficulty, unlock_cost, is_free FROM {milestones_table_name} WHERE deleted_at IS NULL",
         fetch_all=True,
     )
 
@@ -31,7 +46,7 @@ async def get_all_milestones():
 
 async def get_all_milestones_for_org(org_id: int):
     milestones = await execute_db_operation(
-        f"SELECT id, name, color, difficulty FROM {milestones_table_name} WHERE org_id = ? AND deleted_at IS NULL",
+        f"SELECT id, name, color, difficulty, unlock_cost, is_free FROM {milestones_table_name} WHERE org_id = ? AND deleted_at IS NULL",
         (org_id,),
         fetch_all=True,
     )
@@ -44,6 +59,9 @@ async def update_milestone(
     name: str | None = None,
     color: str | None = None,
     difficulty: str | None = None,
+    unlock_cost: int | None = None,
+    is_free: bool | None = None,
+    is_locked: bool | None = None,
 ):
     updates = []
     params = []
@@ -56,6 +74,15 @@ async def update_milestone(
     if difficulty is not None:
         updates.append("difficulty = ?")
         params.append(difficulty)
+    if unlock_cost is not None:
+        updates.append("unlock_cost = ?")
+        params.append(unlock_cost)
+    if is_free is not None:
+        updates.append("is_free = ?")
+        params.append(1 if is_free else 0)
+    if is_locked is not None:
+        updates.append("is_locked = ?")
+        params.append(1 if is_locked else 0)
 
     if not updates:
         return
@@ -157,3 +184,62 @@ async def get_user_metrics_for_all_milestones(user_id: int, course_id: int):
         }
         for row in results
     ]
+
+
+async def unlock_milestone(user_id: int, milestone_id: int):
+    from api.db.user import get_user_by_id
+    from api.config import users_table_name
+    from api.utils.db import get_new_db_connection
+
+    # 1. Fetch milestone unlock cost
+    milestone = await get_milestone(milestone_id)
+    if not milestone:
+        raise ValueError("Milestone not found")
+
+    cost = milestone.get("unlock_cost", 0)
+    if cost <= 0:
+        return {"message": "Milestone is already free"}
+
+    # 2. Get user credits
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise ValueError("User not found")
+
+    current_credits = user.get("credits", 0)
+    if current_credits < cost:
+        raise ValueError("Insufficient credits")
+
+    # 3. Check if already unlocked
+    already_unlocked = await execute_db_operation(
+        "SELECT 1 FROM user_unlocked_milestones WHERE user_id = ? AND milestone_id = ?",
+        (user_id, milestone_id),
+        fetch_one=True
+    )
+    if already_unlocked:
+        return {"message": "Milestone already unlocked"}
+
+    # 4. Deduct credits and record unlock in a transaction
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+        try:
+            # Deduct credits
+            await cursor.execute(
+                f"UPDATE {users_table_name} SET credits = credits - ? WHERE id = ?",
+                (cost, user_id)
+            )
+
+            # Record unlock
+            await cursor.execute(
+                "INSERT INTO user_unlocked_milestones (user_id, milestone_id) VALUES (?, ?)",
+                (user_id, milestone_id)
+            )
+
+            await conn.commit()
+        except Exception as e:
+            await conn.rollback()
+            raise e
+
+    return {
+        "message": "Milestone unlocked successfully",
+        "credits_remaining": current_credits - cost
+    }

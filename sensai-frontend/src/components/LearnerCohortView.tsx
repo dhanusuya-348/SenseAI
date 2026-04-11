@@ -8,8 +8,9 @@ import { Course, Cohort } from "@/types";
 import { ChevronDown } from "lucide-react";
 import MobileDropdown, { DropdownOption } from "./MobileDropdown";
 import confetti from "canvas-confetti";
-import { unlockCourse } from "@/lib/api";
-import { Lock, Coins, Sparkles, Info } from "lucide-react";
+import { unlockModule } from "@/lib/api";
+import { Lock, Coins, Sparkles, Info, X, Zap } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 // Constants for localStorage keys
 const LAST_INCREMENT_DATE_KEY = 'streak_last_increment_date';
@@ -76,7 +77,12 @@ export default function LearnerCohortView({
     // Credit System State
     const [userCredits, setUserCredits] = useState<number>(0);
     const [isUnlocking, setIsUnlocking] = useState<boolean>(false);
-    const [selectedCourseToUnlock, setSelectedCourseToUnlock] = useState<Course | null>(null);
+    const [selectedModuleToUnlock, setSelectedModuleToUnlock] = useState<Module | null>(null);
+
+    // Credit Popup State
+    const [showCreditPopup, setShowCreditPopup] = useState<boolean>(false);
+    const [earnedCredits, setEarnedCredits] = useState<number>(0);
+    const popupTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Refs for course tab scrolling functionality
     const courseTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -255,11 +261,24 @@ export default function LearnerCohortView({
     }, [fetchStreakData, isStreakIncrementedToday]);
 
     // Handler for task completion updates
-    const handleTaskComplete = useCallback((taskId: string, isComplete: boolean) => {
+    const handleTaskComplete = useCallback((taskId: string, isComplete: boolean, creditsEarned: number = 0) => {
         setLocalCompletedTaskIds(prev => ({
             ...prev,
             [taskId]: isComplete
         }));
+
+        // If credits were earned, show the popup and update balance
+        if (creditsEarned > 0) {
+            triggerCreditPopup(creditsEarned);
+            setUserCredits(prev => {
+                const newCredits = prev + creditsEarned;
+                // Dispatch event to update global header
+                window.dispatchEvent(new CustomEvent('user-credits-updated', { 
+                    detail: { credits: newCredits } 
+                }));
+                return newCredits;
+            });
+        }
 
         // If a task was completed, check for streak update after a small delay
         if (isComplete && !isStreakIncrementedToday()) {
@@ -290,9 +309,7 @@ export default function LearnerCohortView({
 
         // If a question was completed, check for streak update after a small delay
         if (isComplete) {
-            // Award celebratory feedback if credits were earned
-            // Note: In a real scenario, we'd get this from the API response
-            // For now, we'll trigger effects on any completion
+            // Award celebratory feedback
             confetti({
                 particleCount: 100,
                 spread: 70,
@@ -308,15 +325,35 @@ export default function LearnerCohortView({
         }
     }, [fetchStreakData, isStreakIncrementedToday]);
 
-    // Handler for course unlocking
-    const handleUnlockCourse = async () => {
-        if (!selectedCourseToUnlock || !userId) return;
+    // Function to trigger credit earned popup
+    const triggerCreditPopup = (amount: number) => {
+        if (amount <= 0) return;
+        
+        setEarnedCredits(amount);
+        setShowCreditPopup(true);
+        
+        if (popupTimerRef.current) {
+            clearTimeout(popupTimerRef.current);
+        }
+        
+        popupTimerRef.current = setTimeout(() => {
+            setShowCreditPopup(false);
+        }, 4000);
+    };
+
+    // Handler for module unlocking
+    const handleUnlockModule = async () => {
+        if (!selectedModuleToUnlock || !userId) return;
 
         setIsUnlocking(true);
         try {
-            const result = await unlockCourse(selectedCourseToUnlock.id, Number(userId));
+            const result = await unlockModule(Number(selectedModuleToUnlock.id), Number(userId));
             if (result.success) {
                 setUserCredits(result.credits_remaining);
+                // Dispatch event to update global header
+                window.dispatchEvent(new CustomEvent('user-credits-updated', { 
+                    detail: { credits: result.credits_remaining } 
+                }));
                 confetti({
                     particleCount: 150,
                     spread: 100,
@@ -324,16 +361,15 @@ export default function LearnerCohortView({
                     colors: ['#FFD700', '#FFA500', '#ffffff']
                 });
                 
-                // Refresh courses to update lock status
-                // In a real app we might just update the local state
+                // Refresh to update module statuses
                 window.location.reload(); 
             }
         } catch (error: any) {
             console.error("Unlock failed:", error);
-            alert(error.message || "Failed to unlock course. Not enough credits?");
+            alert(error.message || "Failed to unlock module. Not enough credits?");
         } finally {
             setIsUnlocking(false);
-            setSelectedCourseToUnlock(null);
+            setSelectedModuleToUnlock(null);
         }
     };
 
@@ -419,19 +455,12 @@ export default function LearnerCohortView({
                                                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-light'
                                                 }`}
                                             onClick={() => {
-                                                if (course.is_locked) {
-                                                    setSelectedCourseToUnlock(course);
-                                                } else {
-                                                    handleCourseSelect(index);
-                                                }
+                                                handleCourseSelect(index);
                                             }}
                                             ref={el => { courseTabRefs.current[index] = el; }}
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span className="relative z-10">{course.name}</span>
-                                                {course.is_locked && (
-                                                    <Lock size={14} className="text-gray-400 group-hover:text-amber-500 transition-colors" />
-                                                )}
                                             </div>
 
                                             {/* Active indicator - visible only for active tab */}
@@ -490,6 +519,10 @@ export default function LearnerCohortView({
                             onTaskComplete={handleTaskComplete}
                             onQuestionComplete={handleQuestionComplete}
                             onDialogClose={handleDialogClose}
+                            onUnlockModule={(moduleId) => {
+                                const module = modules.find(m => m.id === moduleId);
+                                if (module) setSelectedModuleToUnlock(module);
+                            }}
                             taskId={taskId}
                             questionId={questionId}
                             onUpdateTaskAndQuestionIdInUrl={onUpdateTaskAndQuestionIdInUrl}
@@ -574,35 +607,42 @@ export default function LearnerCohortView({
             )}
         </div>
         
-        {/* Unlock Course Modal */}
-        {selectedCourseToUnlock && (() => {
-            const course = selectedCourseToUnlock;
+        {/* Unlock Module Modal */}
+        {selectedModuleToUnlock && (() => {
+            const module = selectedModuleToUnlock;
             return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-md bg-[#0f0f0f] border border-gray-800 rounded-3xl p-8 shadow-2xl transform animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="w-full max-w-md bg-[#0f0f0f] border border-gray-800 rounded-3xl p-8 shadow-2xl relative">
+                        <button 
+                            onClick={() => setSelectedModuleToUnlock(null)}
+                            className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+
                         <div className="flex justify-center mb-6">
                             <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
                                 <Lock size={32} className="text-amber-500" />
                             </div>
                         </div>
                         
-                        <h2 className="text-2xl font-light text-center text-white mb-2">Unlock Advanced Course</h2>
+                        <h2 className="text-2xl font-light text-center text-white mb-2">Unlock Module</h2>
                         <p className="text-gray-400 text-center mb-8 font-light">
-                            Unlock <span className="text-white font-medium">{course.name}</span> to continue your learning journey.
+                            Unlock <span className="text-white font-medium">{module.title}</span> to access its tasks and continue learning.
                         </p>
                         
                         <div className="space-y-4 mb-8">
                             <div className="flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
                                 <span className="text-gray-400">Unlock Cost</span>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xl font-medium text-white">{course.unlock_cost}</span>
+                                    <span className="text-xl font-medium text-white">{module.unlock_cost}</span>
                                     <Coins size={16} className="text-amber-500" />
                                 </div>
                             </div>
                             <div className="flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/10">
                                 <span className="text-gray-400">Your Credits</span>
                                 <div className="flex items-center gap-2">
-                                    <span className={`text-xl font-medium ${userCredits >= (course.unlock_cost || 0) ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    <span className={`text-xl font-medium ${userCredits >= (module.unlock_cost || 0) ? 'text-emerald-400' : 'text-red-400'}`}>
                                         {userCredits}
                                     </span>
                                     <Coins size={16} className="text-amber-500" />
@@ -610,25 +650,25 @@ export default function LearnerCohortView({
                             </div>
                         </div>
 
-                        {userCredits < (course.unlock_cost || 0) ? (
+                        {userCredits < (module.unlock_cost || 0) ? (
                             <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm mb-6 flex items-start gap-3">
                                 <Info size={16} className="mt-0.5 flex-shrink-0" />
-                                <p>You need { (course.unlock_cost || 0) - userCredits } more credits to unlock this course. Keep completing tasks!</p>
+                                <p>You need { (module.unlock_cost || 0) - userCredits } more credits to unlock this module. Keep completing tasks!</p>
                             </div>
                         ) : null}
 
                         <div className="flex gap-3">
                             <button
-                                onClick={() => setSelectedCourseToUnlock(null)}
+                                onClick={() => setSelectedModuleToUnlock(null)}
                                 className="flex-1 py-4 px-6 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium transition-all"
                             >
                                 Cancel
                             </button>
                             <button
-                                disabled={isUnlocking || userCredits < (course.unlock_cost || 0)}
-                                onClick={handleUnlockCourse}
+                                disabled={isUnlocking || userCredits < (module.unlock_cost || 0)}
+                                onClick={handleUnlockModule}
                                 className={`flex-1 py-4 px-6 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 
-                                    ${userCredits < (course.unlock_cost || 0) 
+                                    ${userCredits < (module.unlock_cost || 0) 
                                         ? 'bg-gray-800 text-gray-500 cursor-not-allowed' 
                                         : 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20 active:scale-95'}`}
                             >
@@ -645,6 +685,33 @@ export default function LearnerCohortView({
                 </div>
             );
         })()}
+
+        {/* Credit Earned Popup */}
+        <AnimatePresence>
+            {showCreditPopup && (
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.8, y: 50 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.8, y: 50 }}
+                    className="fixed bottom-24 right-8 z-[100] pointer-events-none"
+                >
+                    <div className="bg-gradient-to-r from-amber-400 to-amber-600 p-[1px] rounded-2xl shadow-[0_0_30px_rgba(245,158,11,0.4)]">
+                        <div className="bg-[#0f0f0f] px-6 py-4 rounded-[15px] flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/30">
+                                <Zap className="text-amber-500 fill-amber-500" size={20} />
+                            </div>
+                            <div>
+                                <div className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mb-1">Task Completed!</div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl font-light text-white tracking-tighter">+{earnedCredits}</span>
+                                    <span className="text-xs text-gray-400 font-medium tracking-wide">CREDITS</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
         </>
     );
 }

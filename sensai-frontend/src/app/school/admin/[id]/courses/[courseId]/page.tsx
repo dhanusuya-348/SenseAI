@@ -140,7 +140,6 @@ export default function CreateCourse() {
     const [selectedCohort, setSelectedCohort] = useState<any | null>(null);
 
     const [dripConfig, setDripConfig] = useState<DripConfig | undefined>(undefined);
-    const [unlockCost, setUnlockCost] = useState(0);
 
     const [selectedCohortForSettings, setSelectedCohortForSettings] = useState<any | null>(null);
 
@@ -188,7 +187,6 @@ export default function CreateCourse() {
 
             const data = await response.json();
             setCourseTitle(data.name);
-            setUnlockCost(data.unlock_cost || 0);
 
             // Check if milestones are available in the response
             if (data.milestones && Array.isArray(data.milestones)) {
@@ -964,7 +962,123 @@ export default function CreateCourse() {
         }
     };
 
-    const updateCourseMetadata = async (updates: { name?: string, unlock_cost?: number }) => {
+    const updateModuleFree = async (moduleId: string, isFree: boolean) => {
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/milestones/${moduleId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    is_free: isFree
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to update module free status: ${response.status}`);
+            }
+
+            // Update the modules state
+            setModules(prevModules =>
+                prevModules.map(module => {
+                    if (module.id === moduleId) {
+                        return {
+                            ...module,
+                            is_free: isFree
+                        };
+                    }
+                    return module;
+                })
+            );
+
+            console.log("Module free status updated successfully");
+
+            // Show toast notification
+            setToast({
+                show: true,
+                title: isFree ? 'Module made Free' : 'Module locked',
+                description: isFree ? `Learners can now access this module for free` : `Learners will need to redeem credits to access`,
+                emoji: isFree ? '🎁' : '🔒'
+            });
+
+            // Auto-hide toast after 3 seconds
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        } catch (error) {
+            console.error("Error updating module free status:", error);
+            // Show error toast
+            setToast({
+                show: true,
+                title: 'Update Failed',
+                description: 'Failed to update module settings',
+                emoji: '⚠️'
+            });
+
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        }
+    };
+
+    const updateModuleLocked = async (moduleId: string, isLocked: boolean) => {
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/milestones/${moduleId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    is_locked: isLocked
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to update module lock status: ${response.status}`);
+            }
+
+            // Update the modules state
+            setModules(prevModules =>
+                prevModules.map(module => {
+                    if (module.id === moduleId) {
+                        return {
+                            ...module,
+                            admin_locked: isLocked,
+                            is_locked: isLocked
+                        };
+                    }
+                    return module;
+                })
+            );
+
+            // Show toast notification
+            setToast({
+                show: true,
+                title: isLocked ? 'Module locked' : 'Module unlocked',
+                description: isLocked
+                    ? `Learners cannot access this module unless they redeem credits`
+                    : `Learners can now access this module freely`,
+                emoji: isLocked ? '🔒' : '🔓'
+            });
+
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        } catch (error) {
+            console.error("Error updating module lock status:", error);
+            setToast({
+                show: true,
+                title: 'Update Failed',
+                description: 'Failed to update module lock settings',
+                emoji: '⚠️'
+            });
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        }
+    };
+
+    const updateCourseMetadata = async (updates: { name?: string }) => {
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/courses/${courseId}`, {
                 method: 'PUT',
@@ -979,7 +1093,6 @@ export default function CreateCourse() {
             }
 
             if (updates.name) setCourseTitle(updates.name);
-            if (updates.unlock_cost !== undefined) setUnlockCost(updates.unlock_cost);
 
             setToast({
                 show: true,
@@ -1038,7 +1151,7 @@ export default function CreateCourse() {
     const saveCourseTitle = () => {
         if (titleRef.current) {
             const newTitle = titleRef.current.textContent || "";
-            updateCourseMetadata({ name: newTitle, unlock_cost: unlockCost });
+            updateCourseMetadata({ name: newTitle });
             setIsCourseTitleEditing(false);
         }
     };
@@ -2045,19 +2158,6 @@ export default function CreateCourse() {
                             )}
 
                             <div className="flex items-center space-x-3 ml-auto">
-                                {isCourseTitleEditing && (
-                                    <div className="flex items-center mr-4 bg-gray-50 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-1.5 transition-all">
-                                        <Zap size={14} className="text-yellow-500 mr-2" />
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-2 uppercase tracking-wider">Unlock Cost:</span>
-                                        <input
-                                            type="number"
-                                            value={unlockCost}
-                                            onChange={(e) => setUnlockCost(parseInt(e.target.value) || 0)}
-                                            className="w-16 bg-transparent border-none outline-none text-sm font-bold text-black dark:text-white"
-                                            placeholder="0"
-                                        />
-                                    </div>
-                                )}
                                 {isCourseTitleEditing ? (
                                     <>
                                         <button
@@ -2163,6 +2263,8 @@ export default function CreateCourse() {
                             courseId={courseId}
                             onDuplicateItem={handleDuplicateItem}
                             onUpdateModuleDifficulty={updateModuleDifficulty}
+                            onUpdateModuleFree={updateModuleFree}
+                            onUpdateModuleLocked={updateModuleLocked}
                         />
                     </div>
 

@@ -47,6 +47,10 @@ export interface Module {
   isEditing?: boolean;
   progress?: number;
   unlockAt?: string;
+  unlock_cost?: number;
+  is_locked?: boolean;
+  admin_locked?: boolean;  // Admin-forced lock (separate from credit-based locking)
+  is_free?: boolean;
   difficulty?: 'easy' | 'medium' | 'hard';
 }
 

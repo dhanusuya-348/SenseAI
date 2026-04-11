@@ -26,6 +26,7 @@ from api.routes import (
     ai,
     scorecard,
     integration,
+    growth,
 )
 
 # from api.routes.ai import (
@@ -102,9 +103,19 @@ async def log_requests(request: Request, call_next):
 
 
 # Add CORS middleware to allow cross-origin requests (for frontend to access backend)
+# NOTE: Must be registered AFTER the custom @app.middleware("http") decorator so that
+# it acts as the outermost layer and can handle browser preflight (OPTIONS) requests.
+# The order in FastAPI for add_middleware is such that the last added is the outermost.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with your frontend URL in production
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -134,6 +145,7 @@ app.include_router(code.router, prefix="/code", tags=["code"])
 app.include_router(hva.router, prefix="/hva", tags=["hva"])
 app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
 app.include_router(integration.router, prefix="/integrations", tags=["integrations"])
+app.include_router(growth.router, tags=["growth"])
 
 
 @app.exception_handler(Exception)

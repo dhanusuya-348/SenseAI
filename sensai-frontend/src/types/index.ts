@@ -57,6 +57,7 @@ export interface Task {
     questions?: any[]; // Questions for quizzes and exams
     scheduled_publish_at: string;
     is_generating: boolean;
+    difficulty?: 'easy' | 'medium' | 'hard';
 }
 
 export interface Milestone {
@@ -66,6 +67,11 @@ export interface Milestone {
     ordering: number;
     tasks?: Task[];
     unlock_at?: string;
+    unlock_cost?: number;
+    is_free?: boolean;
+    is_locked?: boolean;
+    admin_locked?: boolean;  // Admin-forced lock separate from credit-based locking
+    difficulty?: 'easy' | 'medium' | 'hard';
 }
 
 // Export all quiz types

@@ -22,6 +22,7 @@ from api.config import (
     organizations_table_name,
     group_role_learner,
     group_role_mentor,
+    users_table_name,
 )
 from api.db.task import (
     get_task,
@@ -219,7 +220,7 @@ async def get_course_generation_job_details(job_uuid: str) -> Dict:
 
 async def get_course(course_id: int, only_published: bool = True, user_id: int = None) -> Dict:
     course = await execute_db_operation(
-        f"SELECT c.id, c.name, cgj.status as course_generation_status, c.unlock_cost FROM {courses_table_name} c LEFT JOIN {course_generation_jobs_table_name} cgj ON c.id = cgj.course_id WHERE c.id = ? AND c.deleted_at IS NULL",
+        f"SELECT c.id, c.name, cgj.status as course_generation_status FROM {courses_table_name} c LEFT JOIN {course_generation_jobs_table_name} cgj ON c.id = cgj.course_id WHERE c.id = ? AND c.deleted_at IS NULL",
         (course_id,),
         fetch_one=True,
     )
@@ -228,26 +229,26 @@ async def get_course(course_id: int, only_published: bool = True, user_id: int =
         return None
 
     is_locked = False
-    unlock_cost = course[3] or 0
-    if user_id and unlock_cost > 0:
-        # Check if user has unlocked it
-        unlocked = await execute_db_operation(
-            "SELECT 1 FROM user_unlocked_courses WHERE user_id = ? AND course_id = ?",
-            (user_id, course_id),
-            fetch_one=True
-        )
-        if not unlocked:
-            is_locked = True
 
     # Fix the milestones query to match the actual schema
     milestones = await execute_db_operation(
-        f"""SELECT m.id, m.name, m.color, cm.ordering, m.difficulty
+        f"""SELECT m.id, m.name, m.color, cm.ordering, m.difficulty, m.unlock_cost, m.is_free, m.is_locked
             FROM {course_milestones_table_name} cm
             JOIN milestones m ON cm.milestone_id = m.id
             WHERE cm.course_id = ? AND cm.deleted_at IS NULL AND m.deleted_at IS NULL ORDER BY cm.ordering""",
         (course_id,),
         fetch_all=True,
     )
+
+    # Fetch unlocked milestones for this user
+    unlocked_milestone_ids = set()
+    if user_id:
+        unlocked_milestones = await execute_db_operation(
+            "SELECT milestone_id FROM user_unlocked_milestones WHERE user_id = ?",
+            (user_id,),
+            fetch_all=True
+        )
+        unlocked_milestone_ids = {row[0] for row in unlocked_milestones}
 
     # Fetch all tasks for this course
     tasks = await execute_db_operation(
@@ -256,7 +257,8 @@ async def get_course(course_id: int, only_published: bool = True, user_id: int =
                 (SELECT COUNT(*) FROM {questions_table_name} q 
                  WHERE q.task_id = t.id AND q.deleted_at IS NULL)
              ELSE NULL END) as num_questions,
-            tgj.status as task_generation_status
+            tgj.status as task_generation_status,
+            t.difficulty
             FROM {course_tasks_table_name} ct
             JOIN {tasks_table_name} t ON ct.task_id = t.id
             LEFT JOIN {task_generation_jobs_table_name} tgj ON t.id = tgj.task_id
@@ -287,6 +289,7 @@ async def get_course(course_id: int, only_published: bool = True, user_id: int =
                 "num_questions": task[7],
                 "is_generating": task[8] is not None
                 and task[8] == GenerateTaskJobStatus.STARTED,
+                "difficulty": task[9], # Add difficulty to task dict
             }
         )
 
@@ -294,19 +297,35 @@ async def get_course(course_id: int, only_published: bool = True, user_id: int =
         "id": course[0],
         "name": course[1],
         "course_generation_status": course[2],
-        "unlock_cost": unlock_cost,
-        "is_locked": is_locked
+        "is_locked": False # Courses are never locked
     }
     course_dict["milestones"] = []
 
     for milestone in milestones:
         milestone_id = milestone[0]
+        m_unlock_cost = milestone[5] or 0
+        m_is_free = bool(milestone[6]) if len(milestone) > 6 else False
+        m_admin_locked = bool(milestone[7]) if len(milestone) > 7 else False  # Admin-forced lock from DB
+        m_is_locked = False
+
+        # Admin-forced lock takes priority over everything
+        if m_admin_locked:
+            m_is_locked = True
+        elif user_id and m_unlock_cost > 0 and not m_is_free:
+            # Credit-based lock: lock if user hasn't unlocked it
+            if milestone_id not in unlocked_milestone_ids:
+                m_is_locked = True
+
         milestone_dict = {
             "id": milestone_id,
             "name": milestone[1],
             "color": milestone[2],
             "ordering": milestone[3],
             "difficulty": milestone[4],
+            "unlock_cost": m_unlock_cost,
+            "is_free": m_is_free,
+            "is_locked": m_is_locked,
+            "admin_locked": m_admin_locked,  # Expose admin lock status separately for admin UI
             "tasks": tasks_by_milestone.get(milestone_id, []),
         }
         course_dict["milestones"].append(milestone_dict)
@@ -773,10 +792,10 @@ async def create_course(name: str, org_id: int, unlock_cost: int = 0) -> int:
 
     course_id = await execute_db_operation(
         f"""
-        INSERT INTO {courses_table_name} (name, org_id, unlock_cost)
-        VALUES (?, ?, ?)
+        INSERT INTO {courses_table_name} (name, org_id)
+        VALUES (?, ?)
         """,
-        (name, org_id, unlock_cost),
+        (name, org_id),
         get_last_row_id=True,
     )
 
@@ -814,15 +833,12 @@ async def get_course_org_id(course_id: int) -> int:
     return course[0]
 
 
-async def update_course(course_id: int, name: str = None, unlock_cost: int = None):
+async def update_course(course_id: int, name: str = None):
     updates = []
     params = []
     if name is not None:
         updates.append("name = ?")
         params.append(name)
-    if unlock_cost is not None:
-        updates.append("unlock_cost = ?")
-        params.append(unlock_cost)
     
     if not updates:
         return
@@ -832,50 +848,7 @@ async def update_course(course_id: int, name: str = None, unlock_cost: int = Non
     await execute_db_operation(query, tuple(params))
 
 
-async def unlock_course(course_id: int, user_id: int) -> Dict:
-    # 1. Get course cost
-    course = await execute_db_operation(
-        f"SELECT unlock_cost FROM {courses_table_name} WHERE id = ?",
-        (course_id,),
-        fetch_one=True
-    )
-    if not course:
-        raise ValueError("Course not found")
-    
-    cost = course[0] or 0
-    
-    # 2. Get user credits
-    from api.db.user import get_user_by_id
-    user = await get_user_by_id(user_id)
-    if not user:
-        raise ValueError("User not found")
-    
-    current_credits = user.get("credits", 0)
-    
-    if current_credits < cost:
-        raise ValueError("Insufficient credits")
-    
-    async with get_new_db_connection() as conn:
-        cursor = await conn.cursor()
-        
-        # 3. Deduct credits
-        await cursor.execute(
-            f"UPDATE {users_table_name} SET credits = credits - ? WHERE id = ?",
-            (cost, user_id)
-        )
-        
-        # 4. Record unlock
-        await cursor.execute(
-            "INSERT INTO user_unlocked_courses (user_id, course_id) VALUES (?, ?)",
-            (user_id, course_id)
-        )
-        
-        await conn.commit()
-    
-    return {
-        "success": True,
-        "credits_remaining": current_credits - cost
-    }
+
 
 
 async def check_and_insert_missing_course_milestones(
@@ -970,7 +943,11 @@ async def update_task_orders(task_orders: List[Tuple[int, int]]):
 
 
 async def add_milestone_to_course(
-    course_id: int, milestone_name: str, milestone_color: str
+    course_id: int, 
+    milestone_name: str, 
+    milestone_color: str,
+    difficulty: str = "easy",
+    unlock_cost: int = 0
 ) -> Tuple[int, int]:
     org_id = await get_org_id_for_course(course_id)
 
@@ -980,8 +957,8 @@ async def add_milestone_to_course(
 
         # Get the max ordering value for this course
         await cursor.execute(
-            f"INSERT INTO {milestones_table_name} (name, color, org_id) VALUES (?, ?, ?)",
-            (milestone_name, milestone_color, org_id),
+            f"INSERT INTO {milestones_table_name} (name, color, org_id, difficulty, unlock_cost) VALUES (?, ?, ?, ?, ?)",
+            (milestone_name, milestone_color, org_id, difficulty, unlock_cost),
         )
 
         milestone_id = cursor.lastrowid

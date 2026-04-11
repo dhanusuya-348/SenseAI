@@ -319,17 +319,19 @@ export const addModule = async (courseId: string, schoolId: string, modules: Mod
   }
 };
 
+
+
 /**
- * Unlocks a course for a user by spending credits
- * @param courseId - The ID of the course to unlock
- * @param userId - The ID of the user unlocking the course
+ * Unlocks a module (milestone) for a user by spending credits
+ * @param milestoneId - The ID of the module to unlock
+ * @param userId - The ID of the user unlocking the module
  * @returns Success status and remaining credits
  */
-export const unlockCourse = async (courseId: number, userId: number): Promise<{
+export const unlockModule = async (milestoneId: number, userId: number): Promise<{
     success: boolean,
     credits_remaining: number
 }> => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/courses/${courseId}/unlock`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/milestones/${milestoneId}/unlock`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -338,9 +340,13 @@ export const unlockCourse = async (courseId: number, userId: number): Promise<{
     });
 
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: "Failed to unlock course" }));
-        throw new Error(errorData.detail || "Failed to unlock course");
+        const errorData = await response.json().catch(() => ({ detail: "Failed to unlock module" }));
+        throw new Error(errorData.detail || "Failed to unlock module");
     }
 
-    return await response.json();
+    const data = await response.json();
+    return {
+        success: true,
+        credits_remaining: data.credits_remaining
+    };
 };
