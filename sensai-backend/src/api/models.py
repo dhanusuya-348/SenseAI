@@ -741,6 +741,20 @@ class MarkTaskCompletedRequest(BaseModel):
 class GetUserStreakResponse(BaseModel):
     streak_count: int
     active_days: List[str]
+    is_broken: bool = False
+    can_redeem: bool = False
+    redemption_deadline: Optional[datetime] = None
+    recovery_task_id: Optional[int] = None
+
+
+class RedeemStreakCreditsRequest(BaseModel):
+    user_id: int
+    cohort_id: int
+
+
+class RedeemStreakTaskRequest(BaseModel):
+    user_id: int
+    cohort_id: int
 
 
 class PresignedUrlRequest(BaseModel):

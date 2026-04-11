@@ -59,6 +59,7 @@ org_api_keys_table_name = "org_api_keys"
 code_drafts_table_name = "code_drafts"
 integrations_table_name = "integrations"
 bq_sync_table_name = "bq_sync"
+streak_redemptions_table_name = "streak_redemptions"
 assignment_table_name = "assignment"
 
 UPLOAD_FOLDER_NAME = "uploads"
@@ -73,3 +74,5 @@ openai_plan_to_model_name = {
     "audio": "gpt-4o-audio-preview-2025-06-03",
     "router": "gpt-4.1-mini-2025-04-14",
 }
+STREAK_RECOVERY_CREDIT_COST = 50
+STREAK_RECOVERY_WINDOW_HOURS = 48

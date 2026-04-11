@@ -77,6 +77,8 @@ async def get_user_streak(user_id: int, cohort_id: int) -> GetUserStreakResponse
     return {
         "streak_count": streak_count,
         "active_days": active_days,
+        "is_broken": True,
+        "can_redeem": True,
     }
 
 

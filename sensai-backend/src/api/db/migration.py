@@ -231,5 +231,32 @@ async def cleanup_invalid_chat_history():
         await conn.commit()
 
 
+async def add_streak_redemption_columns():
+    """Add columns for streak redemption to the users table"""
+    async with get_new_db_connection() as conn:
+        cursor = await conn.cursor()
+
+        # Get existing columns in users table
+        await cursor.execute(f"PRAGMA table_info({users_table_name})")
+        existing_columns = [col[1] for col in await cursor.fetchall()]
+
+        # Columns to add
+        columns_to_add = [
+            ("last_streak_broken_at", "DATETIME"),
+            ("streak_recovery_task_id", "INTEGER"),
+            ("streak_recovery_deadline", "DATETIME"),
+        ]
+
+        for column_name, column_type in columns_to_add:
+            if column_name not in existing_columns:
+                await cursor.execute(
+                    f"ALTER TABLE {users_table_name} ADD COLUMN {column_name} {column_type}"
+                )
+                print(f"Added column {column_name} to {users_table_name}")
+
+        await conn.commit()
+
+
 async def run_migrations():
     await cleanup_invalid_chat_history()
+    await add_streak_redemption_columns()
