@@ -1,18 +1,28 @@
 "use client";
 
-import React, { useState } from 'react';
-import { usePathname } from 'next/navigation';
+import React, { useState, Suspense } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Gamepad2 } from 'lucide-react';
 import GameSwitcher from '../RelaxationGames/GameSwitcher';
 
-const GameButton: React.FC = () => {
+const GameButtonContent: React.FC = () => {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Show only on the courses list page
+  // Check if we're in a task or question - if so, hide the button
+  const taskId = searchParams.get('taskId');
+  const questionId = searchParams.get('questionId');
+  if (taskId || questionId) return null;
+
+  // Show only on the main school page or courses list page
+  const isSchoolPage = pathname.match(/^\/school\/[^/]+\/?$/);
   const isCoursesPage = pathname.match(/^\/school\/[^/]+\/courses\/?$/);
   
-  if (!isCoursesPage) return null;
+  if (!isSchoolPage && !isCoursesPage) return null;
+
+  // Exclude admin pages explicitly
+  if (pathname.includes('/admin')) return null;
 
   return (
     // Shifted slightly to the left (right-24) to avoid overlap with native mobile FAB
@@ -33,6 +43,14 @@ const GameButton: React.FC = () => {
         </div>
       )}
     </div>
+  );
+};
+
+const GameButton: React.FC = () => {
+  return (
+    <Suspense fallback={null}>
+      <GameButtonContent />
+    </Suspense>
   );
 };
 
