@@ -32,7 +32,7 @@ interface LearnerCourseViewProps {
     modules: Module[];
     completedTaskIds?: Record<string, boolean>;
     completedQuestionIds?: Record<string, Record<string, boolean>>;
-    onTaskComplete?: (taskId: string, isComplete: boolean) => void;
+    onTaskComplete?: (taskId: string, isComplete: boolean, creditsEarned?: number) => void;
     onQuestionComplete?: (taskId: string, questionId: string, isComplete: boolean) => void;
     onDialogClose?: () => void;
     viewOnly?: boolean;
@@ -43,6 +43,7 @@ interface LearnerCourseViewProps {
     taskId?: string | null;
     questionId?: string | null;
     onUpdateTaskAndQuestionIdInUrl?: (taskId: string | null, questionId: string | null) => void;
+    onUnlockModule?: (moduleId: string, cost: number) => void;
 }
 
 export default function LearnerCourseView({
@@ -60,6 +61,7 @@ export default function LearnerCourseView({
     taskId = null,
     questionId = null,
     onUpdateTaskAndQuestionIdInUrl = () => { },
+    onUnlockModule,
 }: LearnerCourseViewProps) {
     // Get user from auth context
     const { user } = useAuth();
@@ -146,6 +148,184 @@ export default function LearnerCourseView({
 
         setCompletedQuestions(flatQuestionCompletions);
     }, [localCompletedQuestionIds]);
+
+    // Function to trigger confetti animation
+    const triggerConfetti = (isFullCompletion = true) => {
+        // Trigger confetti effect with different intensity based on completion type
+        confetti({
+            particleCount: isFullCompletion ? 100 : 50,
+            spread: isFullCompletion ? 70 : 40,
+            origin: { y: 0.6 },
+            colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
+            zIndex: 9999
+        });
+
+        // Play success sound
+        setPlaySuccessSound(true);
+
+        // Reset sound trigger after a short delay
+        setTimeout(() => {
+            setPlaySuccessSound(false);
+        }, 300);
+    };
+
+    // Function to trigger a more extravagant confetti celebration for module completion
+    const triggerModuleCompletionCelebration = () => {
+        // Get random confetti origin points for a more dynamic effect
+        const generateRandomOrigin = () => ({
+            x: 0.2 + Math.random() * 0.6, // Random x value between 0.2 and 0.8
+            y: 0.2 + Math.random() * 0.4  // Random y value between 0.2 and 0.6
+        });
+
+        // First wave - center burst (larger particles)
+        confetti({
+            particleCount: 150,
+            spread: 90,
+            origin: { y: 0.6 },
+            colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
+            zIndex: 9999,
+            scalar: 1.5 // Larger particles
+        });
+
+        // Second wave - left side burst (with gravity)
+        setTimeout(() => {
+            confetti({
+                particleCount: 80,
+                angle: 60,
+                spread: 70,
+                origin: { x: 0, y: 0.5 },
+                colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
+                zIndex: 9999,
+                gravity: 1.2,
+                drift: 2
+            });
+        }, 200);
+
+        // Third wave - right side burst (with gravity)
+        setTimeout(() => {
+            confetti({
+                particleCount: 80,
+                angle: 120,
+                spread: 70,
+                origin: { x: 1, y: 0.5 },
+                colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
+                zIndex: 9999,
+                gravity: 1.2,
+                drift: -2
+            });
+        }, 400);
+
+        // Fourth wave - random bursts for 2 seconds
+        let burstCount = 0;
+        const maxBursts = 5;
+        const burstInterval = setInterval(() => {
+            if (burstCount >= maxBursts) {
+                clearInterval(burstInterval);
+                return;
+            }
+
+            confetti({
+                particleCount: 30,
+                spread: 80,
+                origin: generateRandomOrigin(),
+                colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
+                zIndex: 9999
+            });
+
+            burstCount++;
+        }, 300);
+
+        // Play the more impressive module completion sound
+        setPlayModuleCompletionSound(true);
+
+        // Reset sound trigger after the sound duration
+        setTimeout(() => {
+            setPlayModuleCompletionSound(false);
+        }, 2000); // Longer timeout for the longer sound
+    };
+
+    // Helper for auto-navigation after completion
+    const handleAutoNavigation = useCallback((taskId: string) => {
+        const currentModule = modules.find(m => 
+            m.items.some(item => item.id === taskId)
+        );
+        if (!currentModule) return;
+
+        const currentTaskIndex = currentModule.items.findIndex(item => item.id === taskId);
+        if (currentTaskIndex !== -1 && currentTaskIndex < currentModule.items.length - 1) {
+            const nextTask = currentModule.items[currentTaskIndex + 1];
+            openTaskItem(currentModule.id, nextTask.id);
+        }
+    }, [modules]);
+
+    // Function to handle task completion (called from child components or locally)
+    const completeTask = useCallback(async (taskId: string, autoNavigate: boolean = false) => {
+        if (completedTasks[taskId] || isTestMode || viewOnly) {
+            // Even if we don't call backend, still notify local state for UI
+            const newCompletedTasks = {
+                ...completedTasks,
+                [taskId]: true
+            };
+            setCompletedTasks(newCompletedTasks);
+            if (onTaskComplete) onTaskComplete(taskId, true, 0);
+            
+            // Celebration
+            const taskModule = modules.find(module =>
+                module.items.some(item => item.id === taskId)
+            );
+            if (taskModule && checkModuleCompletion(taskModule.id, newCompletedTasks)) {
+                triggerModuleCompletionCelebration();
+            } else {
+                triggerConfetti(true);
+            }
+
+            if (autoNavigate) handleAutoNavigation(taskId);
+            return;
+        }
+
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tasks/${taskId}/complete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ user_id: parseInt(userId) })
+            });
+
+            if (!response.ok) throw new Error('Failed to mark task complete');
+            
+            const data = await response.json();
+            const creditsEarned = data.credits_earned || 0;
+
+            const newCompletedTasks = {
+                ...completedTasks,
+                [taskId]: true
+            };
+
+            setCompletedTasks(newCompletedTasks);
+
+            if (onTaskComplete) {
+                onTaskComplete(taskId, true, creditsEarned);
+            }
+
+            const taskModule = modules.find(module =>
+                module.items.some(item => item.id === taskId)
+            );
+
+            if (taskModule) {
+                if (checkModuleCompletion(taskModule.id, newCompletedTasks)) {
+                    triggerModuleCompletionCelebration();
+                } else {
+                    triggerConfetti(true);
+                }
+            }
+
+            if (autoNavigate) handleAutoNavigation(taskId);
+        } catch (error) {
+            console.error('Error marking task complete:', error);
+        }
+    }, [completedTasks, isTestMode, viewOnly, modules, userId, onTaskComplete, triggerConfetti, triggerModuleCompletionCelebration, handleAutoNavigation]);
+
 
     // Filter out draft items from modules in both preview and learner view
     const modulesWithFilteredItems = modules.map(module => ({
@@ -553,63 +733,25 @@ export default function LearnerCourseView({
             }
 
             // If this is a single question quiz, mark the entire task as complete
-            if (allQuestions.length <= 1) {
-                const newCompletedTasks = {
-                    ...completedTasks,
-                    [activeItem.id]: true
-                };
-
-                setCompletedTasks(newCompletedTasks);
-
-                // Notify parent component about task completion
-                if (onTaskComplete) {
-                    onTaskComplete(activeItem.id, true);
-                }
-
-                // Check if this task completion has completed the entire module
-                if (activeModuleId && checkModuleCompletion(activeModuleId, newCompletedTasks)) {
-                    // This completes the module - trigger the enhanced celebration
-                    triggerModuleCompletionCelebration();
-                } else {
-                    // Standard celebration for task completion
-                    triggerConfetti(true); // Full celebration for single question quiz completion
-                }
-            } else {
+            if (activeItem && allQuestions.length <= 1) {
+                completeTask(activeItem.id);
+            } else if (activeItem) {
                 // For multi-question quiz, check if all questions are now completed
                 const areAllQuestionsCompleted = allQuestions.every(
                     (q: any) => completedQuestions[q.id] || String(q.id) === String(questionId)
                 );
 
                 if (areAllQuestionsCompleted) {
-                    const newCompletedTasks = {
-                        ...completedTasks,
-                        [activeItem.id]: true
-                    };
-
-                    setCompletedTasks(newCompletedTasks);
-
-                    // Notify parent component about task completion
-                    if (onTaskComplete) {
-                        onTaskComplete(activeItem.id, true);
-                    }
-
-                    // Check if this task completion has completed the entire module
-                    if (activeModuleId && checkModuleCompletion(activeModuleId, newCompletedTasks)) {
-                        // This completes the module - trigger the enhanced celebration
-                        triggerModuleCompletionCelebration();
-                    } else {
-                        // Standard celebration for task completion
-                        triggerConfetti(true); // Full celebration for completing entire quiz
-                    }
+                    completeTask(activeItem.id);
                 } else {
                     // Trigger light confetti for individual question completion
-                    triggerConfetti(false); // Light celebration for single question completion
+                    triggerConfetti(false);
                 }
             }
         }
-    }, [activeItem, activeModuleId, completedTasks, completedQuestions, onTaskComplete, onQuestionComplete]);
+    }, [activeItem, activeModuleId, completedTasks, completedQuestions, onTaskComplete, onQuestionComplete, completeTask, triggerConfetti]);
 
-    // Function to mark task as completed
+    // Function to mark task as completed (Learning Material)
     const markTaskComplete = async () => {
         if (viewOnly || !activeItem || !activeModuleId || !userId) return;
 
@@ -617,43 +759,7 @@ export default function LearnerCourseView({
         setIsMarkingComplete(true);
 
         try {
-            // Store chat message for learning material completion
-            // This is similar to the chat message storage in LearnerQuizView
-            // but we only send a user message, not an AI response
-            try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tasks/${activeItem.id}/complete`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ user_id: parseInt(userId) })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to store learning material completion');
-                }
-            } catch (error) {
-                console.error('Error storing learning material completion:', error);
-                // Continue execution even if this fails - don't block the UI update
-            }
-
-            // Use the shared task completion handler
-            handleTaskCompletion(activeItem.id, true);
-
-            // Find the current module
-            const currentModule = filteredModules.find(m => m.id === activeModuleId);
-            if (!currentModule) return;
-
-            // Find the index of the current task in the module
-            const currentTaskIndex = currentModule.items.findIndex(item => item.id === activeItem.id);
-            if (currentTaskIndex === -1) return;
-
-            // Check if there's a next task in this module
-            if (currentTaskIndex < currentModule.items.length - 1) {
-                // Navigate to the next task in the same module
-                const nextTask = currentModule.items[currentTaskIndex + 1];
-                openTaskItem(activeModuleId, nextTask.id);
-            }
+            await completeTask(activeItem.id, true);
         } catch (error) {
             console.error("Error marking task as complete:", error);
         } finally {
@@ -802,135 +908,13 @@ export default function LearnerCourseView({
         setIsAiResponding(isResponding);
     }, []);
 
-    // Function to trigger confetti animation
-    const triggerConfetti = (isFullCompletion = true) => {
-        // Trigger confetti effect with different intensity based on completion type
-        confetti({
-            particleCount: isFullCompletion ? 100 : 50,
-            spread: isFullCompletion ? 70 : 40,
-            origin: { y: 0.6 },
-            colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
-            zIndex: 9999
-        });
 
-        // Play success sound
-        setPlaySuccessSound(true);
 
-        // Reset sound trigger after a short delay
-        setTimeout(() => {
-            setPlaySuccessSound(false);
-        }, 300);
-    };
-
-    // Function to trigger a more extravagant confetti celebration for module completion
-    const triggerModuleCompletionCelebration = () => {
-        // Get random confetti origin points for a more dynamic effect
-        const generateRandomOrigin = () => ({
-            x: 0.2 + Math.random() * 0.6, // Random x value between 0.2 and 0.8
-            y: 0.2 + Math.random() * 0.4  // Random y value between 0.2 and 0.6
-        });
-
-        // First wave - center burst (larger particles)
-        confetti({
-            particleCount: 150,
-            spread: 90,
-            origin: { y: 0.6 },
-            colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
-            zIndex: 9999,
-            scalar: 1.5 // Larger particles
-        });
-
-        // Second wave - left side burst (with gravity)
-        setTimeout(() => {
-            confetti({
-                particleCount: 80,
-                angle: 60,
-                spread: 70,
-                origin: { x: 0, y: 0.5 },
-                colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
-                zIndex: 9999,
-                gravity: 1.2,
-                drift: 2
-            });
-        }, 200);
-
-        // Third wave - right side burst (with gravity)
-        setTimeout(() => {
-            confetti({
-                particleCount: 80,
-                angle: 120,
-                spread: 70,
-                origin: { x: 1, y: 0.5 },
-                colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
-                zIndex: 9999,
-                gravity: 1.2,
-                drift: -2
-            });
-        }, 400);
-
-        // Fourth wave - random bursts for 2 seconds
-        let burstCount = 0;
-        const maxBursts = 5;
-        const burstInterval = setInterval(() => {
-            if (burstCount >= maxBursts) {
-                clearInterval(burstInterval);
-                return;
-            }
-
-            confetti({
-                particleCount: 30,
-                spread: 80,
-                origin: generateRandomOrigin(),
-                colors: ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'],
-                zIndex: 9999
-            });
-
-            burstCount++;
-        }, 300);
-
-        // Play the more impressive module completion sound
-        setPlayModuleCompletionSound(true);
-
-        // Reset sound trigger after the sound duration
-        setTimeout(() => {
-            setPlayModuleCompletionSound(false);
-        }, 2000); // Longer timeout for the longer sound
-    };
-
-    // Function to handle task completion (called from child components)
-    const handleTaskCompletion = useCallback((taskId: string, isComplete: boolean) => {
+    // Keep handleTaskCompletion as a wrapper for completeTask if needed by child components
+    const handleTaskCompletion = useCallback((taskId: string, isComplete: boolean, creditsEarned: number = 0) => {
         if (!isComplete) return;
-
-        // Create updated completed tasks state
-        const newCompletedTasks = {
-            ...completedTasks,
-            [taskId]: true
-        };
-
-        // Mark the task as completed in our local state
-        setCompletedTasks(newCompletedTasks);
-
-        // Call the onTaskComplete callback to notify parent component
-        if (onTaskComplete) {
-            onTaskComplete(taskId, true);
-        }
-
-        // Find the module containing this task
-        const taskModule = filteredModules.find(module =>
-            module.items.some(item => item.id === taskId)
-        );
-
-        if (taskModule) {
-            // Check if this task completion has completed the entire module
-            if (checkModuleCompletion(taskModule.id, newCompletedTasks)) {
-                // This completes the module - trigger the enhanced celebration
-                triggerModuleCompletionCelebration();
-            } else {
-                // Regular completion celebration
-                triggerConfetti(true);
-            }
-        }
-    }, [completedTasks, filteredModules, onTaskComplete, checkModuleCompletion]);
+        completeTask(taskId);
+    }, [completedTasks, filteredModules, onTaskComplete, checkModuleCompletion, userId, isTestMode, viewOnly]);
 
     // Initialize expandedModules from the isExpanded property of modules
     useEffect(() => {
@@ -995,6 +979,7 @@ export default function LearnerCourseView({
                     expandedModules={expandedModules}
                     onToggleModule={toggleModule}
                     onOpenItem={openTaskItem}
+                    onUnlockModule={onUnlockModule}
                     completedTaskIds={completedTasks}
                     completedQuestionIds={localCompletedQuestionIds}
                 />
@@ -1291,7 +1276,7 @@ export default function LearnerCourseView({
                                                 taskId={activeItem.id}
                                                 userId={userId}
                                                 readOnly={true}
-                                                onMarkComplete={!completedTasks[activeItem?.id] && !viewOnly ? markTaskComplete : undefined}
+                                                onMarkComplete={!completedTasks[activeItem?.id] && !viewOnly ? () => completeTask(activeItem.id) : undefined}
                                                 viewOnly={viewOnly}
                                                 onChatOpenChange={setIsAskDoubtOpen}
                                             />

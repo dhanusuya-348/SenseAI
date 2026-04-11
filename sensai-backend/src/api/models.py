@@ -45,7 +45,12 @@ class AddMilestoneRequest(BaseModel):
 
 
 class UpdateMilestoneRequest(BaseModel):
-    name: str
+    name: Optional[str] = None
+    color: Optional[str] = None
+    difficulty: Optional[str] = None
+    unlock_cost: Optional[int] = None
+    is_free: Optional[bool] = None
+    is_locked: Optional[bool] = None
 
 
 class CreateTagRequest(BaseModel):
@@ -159,7 +164,6 @@ class AddCoursesToCohortRequest(BaseModel):
 class CreateCourseRequest(BaseModel):
     name: str
     org_id: int
-    unlock_cost: Optional[int] = 0
 
 
 class CreateCourseResponse(BaseModel):
@@ -169,8 +173,6 @@ class CreateCourseResponse(BaseModel):
 class Course(BaseModel):
     id: int
     name: str
-    unlock_cost: Optional[int] = 0
-    is_locked: Optional[bool] = False
 
 
 class CourseCohort(Course):
@@ -187,7 +189,10 @@ class Milestone(BaseModel):
     color: Optional[str] = None
     ordering: Optional[int] = None
     unlock_at: Optional[datetime] = None
+    unlock_cost: Optional[int] = 0
     difficulty: Optional[str] = "easy"
+    is_locked: Optional[bool] = False
+    is_free: Optional[bool] = False
 
 
 class TaskType(Enum):
@@ -492,7 +497,6 @@ class RemoveCourseFromCohortsRequest(BaseModel):
 
 class UpdateCourseRequest(BaseModel):
     name: Optional[str] = None
-    unlock_cost: Optional[int] = None
 
 
 class ChatRole(str, Enum):
@@ -674,12 +678,12 @@ class AddMilestoneToCourseRequest(BaseModel):
     name: str
     color: str
     difficulty: Optional[str] = "easy"
+    unlock_cost: Optional[int] = 0
+    is_free: Optional[bool] = False
 
 
-class UpdateMilestoneRequest(BaseModel):
-    name: Optional[str] = None
-    color: Optional[str] = None
-    difficulty: Optional[str] = None
+class UnlockMilestoneRequest(BaseModel):
+    user_id: int
 
 
 class AddMilestoneToCourseResponse(BaseModel):
@@ -829,11 +833,4 @@ class UpdateIntegrationRequest(BaseModel):
     refresh_token: str | None = None
 
 
-class UnlockCourseRequest(BaseModel):
-    user_id: int
 
-
-class UnlockCourseResponse(BaseModel):
-    success: bool
-    credits_remaining: int
-    expires_at: datetime | None = None

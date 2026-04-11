@@ -17,6 +17,7 @@ from api.config import (
     task_completions_table_name,
     task_generation_jobs_table_name,
     assignment_table_name,
+    users_table_name,
 )
 from api.utils.db import (
     get_new_db_connection,
@@ -48,11 +49,19 @@ async def create_draft_task_for_course(
     async with get_new_db_connection() as conn:
         cursor = await conn.cursor()
 
-        query = f"INSERT INTO {tasks_table_name} (org_id, type, title, status) VALUES (?, ?, ?, ?)"
+        # Fetch milestone difficulty to sync with task
+        await cursor.execute(
+            f"SELECT difficulty FROM {milestones_table_name} WHERE id = ?",
+            (milestone_id,)
+        )
+        milestone = await cursor.fetchone()
+        difficulty = milestone[0] if milestone else "easy"
+
+        query = f"INSERT INTO {tasks_table_name} (org_id, type, title, status, difficulty) VALUES (?, ?, ?, ?, ?)"
 
         await cursor.execute(
             query,
-            (org_id, str(type), title, "draft"),
+            (org_id, str(type), title, "draft", difficulty),
         )
 
         task_id = cursor.lastrowid
@@ -766,7 +775,17 @@ async def get_solved_tasks_for_user(
 
 
 async def mark_task_completed(task_id: int, user_id: int) -> int:
-    # 1. Fetch task difficulty
+    # 1. Check if task was already completed by this user
+    already_completed = await execute_db_operation(
+        f"SELECT 1 FROM {task_completions_table_name} WHERE user_id = ? AND task_id = ? AND deleted_at IS NULL",
+        (user_id, task_id),
+        fetch_one=True
+    )
+    
+    if already_completed:
+        return 0 # No new credits for re-completion
+
+    # 2. Fetch task difficulty
     task = await execute_db_operation(
         f"SELECT difficulty FROM {tasks_table_name} WHERE id = ?",
         (task_id,),
@@ -775,18 +794,32 @@ async def mark_task_completed(task_id: int, user_id: int) -> int:
     
     difficulty = task[0] if task else "easy"
     
-    # 2. Map difficulty to credits
-    credit_map = {
+    # 3. Get count of tasks completed today (IST) to determine daily reward scale
+    count_today = await execute_db_operation(
+        f"""
+        SELECT COUNT(*) FROM {task_completions_table_name}
+        WHERE user_id = ? 
+        AND DATE(datetime(created_at, '+5 hours', '+30 minutes')) = DATE(datetime('now', '+5 hours', '+30 minutes'))
+        AND deleted_at IS NULL
+        """,
+        (user_id,),
+        fetch_one=True
+    )
+    
+    daily_index = count_today[0] if count_today else 0
+    
+    # 4. Credits based on difficulty (Easy: 10, Medium: 25, Hard: 50)
+    difficulty_rewards = {
         "easy": 10,
-        "medium": 30,
+        "medium": 25,
         "hard": 50
     }
-    credits_to_add = credit_map.get(difficulty.lower(), 10)
+    credits_to_add = difficulty_rewards.get(difficulty.lower(), 10)
 
     async with get_new_db_connection() as conn:
         cursor = await conn.cursor()
         
-        # 3. Update task completion table
+        # 6. Update task completion table
         await cursor.execute(
             f"""
             INSERT INTO {task_completions_table_name} (user_id, task_id)
@@ -798,7 +831,7 @@ async def mark_task_completed(task_id: int, user_id: int) -> int:
             (user_id, task_id),
         )
         
-        # 4. Award credits to user
+        # 7. Award credits to user
         await cursor.execute(
             f"UPDATE {users_table_name} SET credits = credits + ? WHERE id = ?",
             (credits_to_add, user_id)

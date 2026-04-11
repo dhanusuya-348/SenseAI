@@ -258,5 +258,7 @@ async def add_streak_redemption_columns():
 
 
 async def run_migrations():
+    from api.db.migration_milestones import run_milestone_migration
+    await run_milestone_migration()
     await cleanup_invalid_chat_history()
     await add_streak_redemption_columns()

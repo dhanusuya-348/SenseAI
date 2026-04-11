@@ -65,7 +65,12 @@ export function transformMilestonesToModules(milestones: Milestone[] | undefined
       items: moduleItems,
       isExpanded: false,
       backgroundColor: `${milestone.color}80`, // Add 50% opacity for UI display
-      unlockAt: milestone.unlock_at
+      unlockAt: milestone.unlock_at,
+      unlock_cost: milestone.unlock_cost,
+      is_locked: milestone.is_locked,
+      admin_locked: milestone.admin_locked,
+      is_free: milestone.is_free,
+      difficulty: milestone.difficulty
     };
   });
 

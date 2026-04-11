@@ -17,8 +17,6 @@ export default function CreateCourseDialog({
     schoolId,
 }: CreateCourseDialogProps) {
     const [courseName, setCourseName] = useState('');
-    const [unlockCost, setUnlockCost] = useState(0);
-    const [isLockedDefault, setIsLockedDefault] = useState(false);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -26,8 +24,6 @@ export default function CreateCourseDialog({
     useEffect(() => {
         if (open) {
             setCourseName('');
-            setUnlockCost(0);
-            setIsLockedDefault(false);
             setError('');
             setIsLoading(false);
         }
@@ -51,8 +47,7 @@ export default function CreateCourseDialog({
                 },
                 body: JSON.stringify({
                     name: courseName,
-                    org_id: Number(schoolId),
-                    unlock_cost: isLockedDefault ? unlockCost : 0
+                    org_id: Number(schoolId)
                 }),
             });
 
@@ -117,43 +112,6 @@ export default function CreateCourseDialog({
                             />
                             {error && (
                                 <p className="mt-1 text-xs text-red-500 ml-1">{error}</p>
-                            )}
-                        </div>
-
-                        {/* CLS Configuration */}
-                        <div className="p-4 rounded-xl bg-gray-50 dark:bg-white/5 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-lg ${isLockedDefault ? 'bg-amber-500/10 text-amber-500' : 'bg-green-500/10 text-green-500'}`}>
-                                        {isLockedDefault ? <Lock size={18} /> : <Unlock size={18} />}
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium">Locked by Default</p>
-                                        <p className="text-xs text-gray-500">Requires credits to unlock</p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setIsLockedDefault(!isLockedDefault)}
-                                    className={`w-12 h-6 rounded-full transition-colors relative ${isLockedDefault ? 'bg-purple-600' : 'bg-gray-300 dark:bg-gray-700'}`}
-                                >
-                                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isLockedDefault ? 'translate-x-6' : ''}`} />
-                                </button>
-                            </div>
-
-                            {isLockedDefault && (
-                                <div className="pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                                    <label className="text-xs font-medium text-gray-500 mb-1.5 block">Unlock Cost (Credits)</label>
-                                    <div className="relative">
-                                        <input
-                                            type="number"
-                                            value={unlockCost}
-                                            onChange={(e) => setUnlockCost(Math.max(0, parseInt(e.target.value) || 0))}
-                                            className="w-full px-4 py-2 rounded-lg bg-white dark:bg-[#0D0D0D] border border-gray-200 dark:border-white/10 outline-none focus:border-purple-500"
-                                            placeholder="50"
-                                        />
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-purple-600">CREDITS</span>
-                                    </div>
-                                </div>
                             )}
                         </div>
                     </div>

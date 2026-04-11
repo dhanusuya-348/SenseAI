@@ -5,9 +5,10 @@ from api.db.milestone import (
     update_milestone as update_milestone_in_db,
     delete_milestone as delete_milestone_from_db,
     get_user_metrics_for_all_milestones as get_user_metrics_for_all_milestones_from_db,
+    unlock_milestone as unlock_milestone_in_db,
 )
 from api.db.course import get_milestones_for_course as get_milestones_for_course_from_db
-from api.models import UpdateMilestoneRequest
+from api.models import UpdateMilestoneRequest, UnlockMilestoneRequest
 
 router = APIRouter()
 
@@ -23,9 +24,21 @@ async def update_milestone(milestone_id: int, request: UpdateMilestoneRequest):
         milestone_id, 
         name=request.name, 
         color=request.color, 
-        difficulty=request.difficulty
+        difficulty=request.difficulty,
+        unlock_cost=request.unlock_cost,
+        is_free=request.is_free,
+        is_locked=request.is_locked
     )
     return {"message": "Milestone updated"}
+
+
+@router.post("/{milestone_id}/unlock")
+async def unlock_milestone(milestone_id: int, request: UnlockMilestoneRequest):
+    try:
+        result = await unlock_milestone_in_db(request.user_id, milestone_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/{milestone_id}")

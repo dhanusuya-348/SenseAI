@@ -11,7 +11,6 @@ from api.db.course import (
     swap_milestone_ordering_for_course as swap_milestone_ordering_for_course_in_db,
     swap_task_ordering_for_course as swap_task_ordering_for_course_in_db,
     duplicate_course_to_org,
-    unlock_course as unlock_course_in_db,
     update_course as update_course_in_db,
     add_tasks_to_courses as add_tasks_to_courses_in_db,
     remove_tasks_from_courses as remove_tasks_from_courses_in_db,
@@ -41,8 +40,6 @@ from api.models import (
     SwapTaskOrderingRequest,
     CourseCohort,
     DuplicateCourseRequest,
-    UnlockCourseRequest,
-    UnlockCourseResponse,
 )
 
 router = APIRouter()
@@ -50,7 +47,7 @@ router = APIRouter()
 
 @router.post("/", response_model=CreateCourseResponse)
 async def create_course(request: CreateCourseRequest) -> CreateCourseResponse:
-    return {"id": await create_course_in_db(request.name, request.org_id, request.unlock_cost)}
+    return {"id": await create_course_in_db(request.name, request.org_id)}
 
 
 @router.get("/")
@@ -65,12 +62,7 @@ async def get_course(
     return await get_course_from_db(course_id, only_published, user_id)
 
 
-@router.post("/{course_id}/unlock", response_model=UnlockCourseResponse)
-async def unlock_course(course_id: int, request: UnlockCourseRequest) -> UnlockCourseResponse:
-    try:
-        return await unlock_course_in_db(course_id, request.user_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @router.post("/tasks")
@@ -99,6 +91,8 @@ async def add_milestone_to_course(
         course_id,
         data.name,
         data.color,
+        data.difficulty,
+        data.unlock_cost
     )
     return {"id": milestone_id}
 
@@ -148,7 +142,7 @@ async def get_tasks_for_course(course_id: int) -> List[Dict]:
 
 @router.put("/{course_id}")
 async def update_course(course_id: int, request: UpdateCourseRequest):
-    await update_course_in_db(course_id, name=request.name, unlock_cost=request.unlock_cost)
+    await update_course_in_db(course_id, name=request.name)
     return {"success": True}
 
 

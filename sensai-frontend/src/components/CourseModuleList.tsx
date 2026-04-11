@@ -25,6 +25,9 @@ interface CourseModuleListProps {
     onDeleteModule?: (moduleId: string) => void;
     onEditModuleTitle?: (moduleId: string, newTitle?: string) => void;
     onUpdateModuleDifficulty?: (moduleId: string, difficulty: 'easy' | 'medium' | 'hard') => void;
+    onUpdateModuleFree?: (moduleId: string, isFree: boolean) => void;
+    onUpdateModuleLocked?: (moduleId: string, isLocked: boolean) => void;
+    onUnlockModule?: (moduleId: string, cost: number) => void;
     expandedModules?: Record<string, boolean>; // For learner view
     saveModuleTitle?: (moduleId: string) => void; // Function to save module title
     cancelModuleEditing?: (moduleId: string) => void; // Function to cancel module title editing
@@ -95,6 +98,9 @@ export default function CourseModuleList({
     setShowPublishConfirmation = () => { },
     onQuestionChange = () => { },
     onDuplicateItem,
+    onUnlockModule,
+    onUpdateModuleFree,
+    onUpdateModuleLocked,
 }: CourseModuleListProps) {
     
     // Track dark mode from DOM to ensure proper color calculations and re-renders
@@ -536,7 +542,14 @@ export default function CourseModuleList({
         const module = modules.find(m => m.id === moduleId);
         if (!module) return;
 
-        // Prevent clicking on locked modules
+        // Prevent clicking on locked modules unless it's to unlock them
+        if (module.is_locked) {
+            if (onUnlockModule && module.unlock_cost) {
+                onUnlockModule(module.id, module.unlock_cost);
+            }
+            return;
+        }
+
         if (module.unlockAt) {
             return;
         }
@@ -706,16 +719,23 @@ export default function CourseModuleList({
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            // Prevent toggling locked modules
+                                            // Handle locked modules
+                                            if (module.is_locked) {
+                                                if (onUnlockModule && module.unlock_cost) {
+                                                    onUnlockModule(module.id, module.unlock_cost);
+                                                }
+                                                return;
+                                            }
+                                            // Prevent toggling locked modules (date-based)
                                             if (module.unlockAt) return;
 
                                             onToggleModule(module.id);
                                         }}
-                                        className={`hidden sm:block mr-2 transition-colors ${module.unlockAt
+                                        className={`hidden sm:block mr-2 transition-colors ${(module.unlockAt || module.is_locked)
                                             ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
                                             : 'text-gray-700 dark:text-gray-400 hover:text-black dark:hover:text-white cursor-pointer'}`}
                                         aria-label={getIsExpanded(module.id) ? "Collapse module" : "Expand module"}
-                                        disabled={!!module.unlockAt}
+                                        disabled={!!(module.unlockAt || module.is_locked)}
                                     >
                                         {getIsExpanded(module.id) ? <ChevronDownExpand size={18} /> : <ChevronRight size={18} />}
                                     </button>
@@ -726,7 +746,7 @@ export default function CourseModuleList({
                                                     <Layout size={20} className="text-gray-600 dark:text-gray-400" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                    <div className="flex items-center gap-3 mb-0.5">
                                                         <input
                                                             type="text"
                                                             value={module.title}
@@ -736,6 +756,44 @@ export default function CourseModuleList({
                                                             autoFocus
                                                             onClick={(e) => e.stopPropagation()}
                                                         />
+                                                        {/* Free Module Toggle */}
+                                                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                            <label className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                                                                Free
+                                                            </label>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (onUpdateModuleFree) {
+                                                                        onUpdateModuleFree(module.id, !module.is_free);
+                                                                    }
+                                                                }}
+                                                                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${module.is_free ? 'bg-green-500' : 'bg-gray-200 dark:bg-white/10'}`}
+                                                            >
+                                                                <span
+                                                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${module.is_free ? 'translate-x-4' : 'translate-x-0'}`}
+                                                                />
+                                                            </button>
+                                                        </div>
+                                                        {/* Lock Module Toggle */}
+                                                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                            <label className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                                                                Locked
+                                                            </label>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (onUpdateModuleLocked) {
+                                                                        onUpdateModuleLocked(module.id, !module.admin_locked);
+                                                                    }
+                                                                }}
+                                                                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${module.admin_locked ? 'bg-red-500' : 'bg-gray-200 dark:bg-white/10'}`}
+                                                            >
+                                                                <span
+                                                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${module.admin_locked ? 'translate-x-4' : 'translate-x-0'}`}
+                                                                />
+                                                            </button>
+                                                        </div>
                                                         {/* Difficulty Selector */}
                                                         <select
                                                             value={module.difficulty || 'easy'}
@@ -757,12 +815,44 @@ export default function CourseModuleList({
                                         ) : (
                                             <div className="flex items-center">
                                                 <h2
-                                                    className={`text-lg sm:text-xl font-light ${module.unlockAt ? 'text-gray-400' : 'text-black dark:text-white'}`}
+                                                    className={`text-lg sm:text-xl font-light ${(module.unlockAt || module.is_locked) ? 'text-gray-400' : 'text-black dark:text-white'}`}
                                                 >
                                                     {module.title || "New Module"}
                                                 </h2>
-                                                {module.unlockAt && (
-                                                    <Lock size={16} className="ml-2 text-gray-400" />
+                                                    <div className="flex items-center ml-2 space-x-2">
+                                                        <Lock size={16} className="text-gray-400" />
+                                                        {module.is_locked && !module.is_free && module.unlock_cost && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800/50 shadow-sm animate-pulse-slow">
+                                                                    {module.unlock_cost} Credits
+                                                                </span>
+                                                                {onUnlockModule && (
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            onUnlockModule(module.id, module.unlock_cost!);
+                                                                        }}
+                                                                        className="text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full bg-black dark:bg-white text-white dark:text-black hover:scale-105 active:scale-95 transition-all shadow-md"
+                                                                    >
+                                                                        Redeem
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {module.is_free && (
+                                                            <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/50 shadow-sm">
+                                                                FREE
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                {module.difficulty && !module.isEditing && (
+                                                    <span className={`ml-3 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded ${
+                                                        module.difficulty === 'hard' ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' :
+                                                        module.difficulty === 'medium' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400' :
+                                                        'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400'
+                                                    }`}>
+                                                        {module.difficulty}
+                                                    </span>
                                                 )}
                                             </div>
                                         )}
@@ -981,14 +1071,18 @@ export default function CourseModuleList({
                                                 <div
                                                     key={item.id}
                                                     data-testid={`module-item-${item.id}`}
-                                                    className={`flex items-center group p-2 rounded-md cursor-pointer transition-all relative mt-2
-                                                        ${isPartiallyComplete
-                                                            ? 'bg-white/80 dark:bg-amber-500/20 hover:bg-white dark:hover:bg-amber-500/30 ring-1 ring-amber-400/50 dark:ring-amber-500/30'
-                                                            : 'hover:bg-white/70 dark:hover:bg-gray-700/50'}
+                                                    className={`flex items-center group p-2 rounded-md transition-all relative mt-2
+                                                        ${mode === 'view' && module.is_locked
+                                                            ? 'cursor-not-allowed opacity-40 pointer-events-none'
+                                                            : isPartiallyComplete
+                                                                ? 'bg-white/80 dark:bg-amber-500/20 hover:bg-white dark:hover:bg-amber-500/30 ring-1 ring-amber-400/50 dark:ring-amber-500/30 cursor-pointer'
+                                                                : 'hover:bg-white/70 dark:hover:bg-gray-700/50 cursor-pointer'}
                                                         ${isItemCompleted ? 'opacity-60' : ''}
                                                         ${item.isGenerating ? 'opacity-40 pointer-events-none' : ''}`}
                                                     onClick={() => {
                                                         if (!onOpenItem || item.isGenerating) return;
+                                                        // Block access to items in locked modules (learner view)
+                                                        if (mode === 'view' && module.is_locked) return;
                                                         let questionId: string | undefined = undefined;
                                                         if (item.type === 'quiz' && totalQuizEntries > 0) {
                                                             const questionIds = Object.keys(itemQuizEntries);
@@ -1022,27 +1116,44 @@ export default function CourseModuleList({
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="flex-1">
-                                                <div className={`text-base font-light ${isItemCompleted
-                                                        ? 'line-through text-gray-600 dark:text-white'
-                                                        : isPartiallyComplete
-                                                            ? 'text-amber-800 dark:text-amber-200'
-                                                            : 'text-slate-950 dark:text-white'
-                                                        } outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 empty:before:pointer-events-none mr-2`}>
-                                                        {item.title}
+                                                    <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between min-w-0">
+                                                        <div className={`text-base font-light ${isItemCompleted
+                                                            ? 'line-through text-gray-600 dark:text-white'
+                                                            : isPartiallyComplete
+                                                                ? 'text-amber-800 dark:text-amber-200'
+                                                                : 'text-slate-950 dark:text-white'
+                                                            } outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 empty:before:pointer-events-none truncate pr-2`}>
+                                                            {item.title}
 
-                                                        {/* Always display question count for quizzes (except drafts) */}
-                                                        {item.type === 'quiz' && item.status !== 'draft' && (
-                                                            <span className={`inline-block ml-2 text-sm font-normal ${isPartiallyComplete ? 'text-amber-800 dark:text-amber-200' : 'text-indigo-700 dark:text-gray-400'}`}>
-                                                                ({totalQuizEntries > 0
-                                                                    ? mode === 'view' && !isItemCompleted && hasPartialQuizProgress
-                                                                        ? `${completedQuizCount}/${(item as Quiz).numQuestions}`
-                                                                        : `${totalQuizEntries} question${totalQuizEntries === 1 ? '' : 's'}`
-                                                                    : `${(item as Quiz).numQuestions} question${(item as Quiz).numQuestions === 1 ? '' : 's'}`})
-                                                            </span>
+                                                            {/* Always display question count for quizzes (except drafts) */}
+                                                            {item.type === 'quiz' && item.status !== 'draft' && (
+                                                                <span className={`inline-block ml-2 text-sm font-normal ${isPartiallyComplete ? 'text-amber-800 dark:text-amber-200' : 'text-indigo-700 dark:text-gray-400'}`}>
+                                                                    ({totalQuizEntries > 0
+                                                                        ? mode === 'view' && !isItemCompleted && hasPartialQuizProgress
+                                                                            ? `${completedQuizCount}/${(item as Quiz).numQuestions}`
+                                                                            : `${totalQuizEntries} question${totalQuizEntries === 1 ? '' : 's'}`
+                                                                        : `${(item as Quiz).numQuestions} question${(item as Quiz).numQuestions === 1 ? '' : 's'}`})
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {/* New: Display difficulty and credits reward for learners */}
+                                                        {mode === 'view' && (
+                                                            <div className="flex items-center gap-2 mt-1 sm:mt-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                                                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-sm ${
+                                                                    item.difficulty === 'hard' ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' :
+                                                                    item.difficulty === 'medium' ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400' :
+                                                                    'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400'
+                                                                }`}>
+                                                                    {item.difficulty || 'easy'}
+                                                                </span>
+                                                                <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 flex items-center">
+                                                                    <Brain size={12} className="mr-1 text-purple-500" />
+                                                                    {item.difficulty === 'hard' ? '50' : item.difficulty === 'medium' ? '25' : '10'} CP
+                                                                </span>
+                                                            </div>
                                                         )}
                                                     </div>
-                                                </div>
 
                                                 {/* Item action buttons - only in edit mode */}
                                                 {mode === 'edit' && (

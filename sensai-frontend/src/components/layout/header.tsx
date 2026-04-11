@@ -8,9 +8,10 @@ import { signOut, useSession } from "next-auth/react";
 import { useSchools } from "@/lib/api";
 import CreateCourseDialog from "@/components/CreateCourseDialog";
 import SchoolPickerDialog from "@/components/SchoolPickerDialog";
-import { ChevronDown, Plus, X, Book, School } from "lucide-react";
+import { ChevronDown, Plus, X, Book, School, Coins, TreePine } from "lucide-react";
 import { Cohort } from "@/types";
 import { useThemePreference } from "@/lib/hooks/useThemePreference";
+import { GrowingTreeDialog } from "@/components/GrowingTreeDialog";
 
 interface HeaderProps {
     showCreateCourseButton?: boolean;
@@ -29,10 +30,43 @@ export function Header({
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     const [isCreateCourseDialogOpen, setIsCreateCourseDialogOpen] = useState(false);
     const [isSchoolPickerOpen, setIsSchoolPickerOpen] = useState(false);
+    const [isTreeOpen, setIsTreeOpen] = useState(false);
     const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
     const mobileActionsRef = useRef<HTMLDivElement>(null);
     const { schools, isLoading } = useSchools();
+    const [userCredits, setUserCredits] = useState<number>(0);
+
+    // Fetch user credits if logged in
+    useEffect(() => {
+        if (!session?.user?.id) return;
+
+        const fetchCredits = async () => {
+            try {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/users/${session.user.id}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.credits !== undefined) {
+                        setUserCredits(data.credits);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch credits in header:", error);
+            }
+        };
+
+        fetchCredits();
+        
+        // Listen for credit update events (custom event)
+        const handleCreditUpdate = (event: any) => {
+            if (event.detail && typeof event.detail.credits === 'number') {
+                setUserCredits(event.detail.credits);
+            }
+        };
+
+        window.addEventListener('user-credits-updated', handleCreditUpdate);
+        return () => window.removeEventListener('user-credits-updated', handleCreditUpdate);
+    }, [session?.user?.id]);
 
     // Check if user has a school they own (role admin)
     const hasOwnedSchool = Boolean(schools && schools.length > 0 &&
@@ -186,6 +220,27 @@ export function Header({
 
                 {/* Right side actions */}
                 <div className="flex items-center space-x-4 pr-1">
+                        {/* Credits Balance Display */}
+                        {session?.user?.id && (
+                            <div className="flex items-center gap-1.5">
+                                {/* Tree Icon Button */}
+                                <button
+                                    onClick={() => setIsTreeOpen(true)}
+                                    className="p-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all cursor-pointer group"
+                                    title="View your learning tree"
+                                >
+                                    <TreePine size={18} className="group-hover:scale-110 transition-transform" />
+                                </button>
+
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 group hover:bg-amber-500/20 transition-all">
+                                    <Coins className="text-amber-500 group-hover:scale-110 transition-transform" size={16} />
+                                    <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                                        {userCredits} <span className="text-[10px] font-bold uppercase tracking-tighter opacity-70">Credits</span>
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
                         {showTryDemoButton && (
                             <button
                                 onClick={handleTryDemoClick}
@@ -383,6 +438,12 @@ export function Header({
                     </div>
                 </div>
             )}
+
+            {/* Growing Tree Dialog */}
+            <GrowingTreeDialog 
+                open={isTreeOpen}
+                onClose={() => setIsTreeOpen(false)}
+            />
 
             {/* Create Course Dialog */}
             <CreateCourseDialog
