@@ -1,3 +1,4 @@
+"use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import LearnerCourseView from "./LearnerCourseView";
 import LearningStreak from "./LearningStreak";
@@ -9,8 +10,9 @@ import { ChevronDown } from "lucide-react";
 import MobileDropdown, { DropdownOption } from "./MobileDropdown";
 import confetti from "canvas-confetti";
 import { unlockModule } from "@/lib/api";
-import { Lock, Coins, Sparkles, Info, X, Zap } from "lucide-react";
+import { Lock, Coins, Sparkles, Info, X, Zap, Sword } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 
 // Constants for localStorage keys
 const LAST_INCREMENT_DATE_KEY = 'streak_last_increment_date';
@@ -60,6 +62,7 @@ export default function LearnerCohortView({
     questionId = null,
     onUpdateTaskAndQuestionIdInUrl = () => {},
 }: LearnerCohortViewProps) {
+    const router = useRouter();
     // Add state to manage completed tasks and questions
     const [localCompletedTaskIds, setLocalCompletedTaskIds] = useState<Record<string, boolean>>(completedTaskIds);
     const [localCompletedQuestionIds, setLocalCompletedQuestionIds] = useState<Record<string, Record<string, boolean>>>(completedQuestionIds);
@@ -509,6 +512,32 @@ export default function LearnerCohortView({
                         </div>
                     )}
 
+                    {/* Enter Arena Banner (Visible on all screens) */}
+                    {cohortId && (
+                        <motion.button
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            onClick={() => router.push(`/arena?cohort_id=${cohortId}`)}
+                            className="w-full mb-6 relative overflow-hidden group p-4 rounded-2xl bg-gradient-to-r from-purple-900/40 via-indigo-900/40 to-purple-900/40 border border-purple-500/30 hover:border-purple-500/60 transition-all shadow-xl"
+                        >
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.15),transparent_70%)] group-hover:scale-150 transition-transform duration-700" />
+                            <div className="relative flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-purple-500/20 border border-purple-500/30 group-hover:scale-110 transition-transform">
+                                        <Sword className="text-purple-400" size={24} />
+                                    </div>
+                                    <div className="text-left">
+                                        <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition-colors">PvP Quiz Arena ⚔️</h3>
+                                        <p className="text-sm text-gray-400">Battle your cohort mates in real-time and earn extra credits!</p>
+                                    </div>
+                                </div>
+                                <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-medium text-purple-300 group-hover:bg-purple-500/20 transition-all">
+                                    Join Battle →
+                                </div>
+                            </div>
+                        </motion.button>
+                    )}
+
                     {/* Course Content */}
                     <div>
                         <LearnerCourseView
@@ -552,7 +581,7 @@ export default function LearnerCohortView({
                             </p>
                         </div>
 
-                        {/* Streak component when not loading and cohort ID exists */}
+                         {/* Streak component when not loading and cohort ID exists */}
                         {!isLoadingStreak && cohortId && (
                             <LearningStreak
                                 streakDays={streakCount}

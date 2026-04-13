@@ -839,64 +839,57 @@ export default function CreateCourse() {
     };
 
     const saveModuleTitle = async (moduleId: string) => {
-        // Find the heading element by data attribute
-        const headingElement = document.querySelector(`[data-module-id="${moduleId}"]`) as HTMLHeadingElement;
-        if (headingElement) {
-            // Get the current content
-            const newTitle = headingElement.textContent || "";
+        // Get the latest module title from state
+        const module = modules.find(m => m.id === moduleId);
+        if (!module) return;
+        
+        const newTitle = module.title;
 
-            try {
-                // Make API call to update the milestone on the server
-                const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/milestones/${moduleId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        name: newTitle
-                    }),
-                });
+        try {
+            // Make API call to update the milestone on the server
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/milestones/${moduleId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: newTitle
+                }),
+            });
 
-                if (!response.ok) {
-                    throw new Error(`Failed to update module title: ${response.status}`);
-                }
-
-                // If successful, update the state
-                updateModuleTitle(moduleId, newTitle);
-                console.log("Module title updated successfully");
-
-                // Show toast notification
-                setToast({
-                    show: true,
-                    title: 'A makeover',
-                    description: `Module name updated successfully`,
-                    emoji: '✨'
-                });
-
-                // Auto-hide toast after 3 seconds
-                setTimeout(() => {
-                    setToast(prev => ({ ...prev, show: false }));
-                }, 3000);
-            } catch (error) {
-                console.error("Error updating module title:", error);
-
-                // Still update the local state even if the API call fails
-                // This provides a better user experience while allowing for retry later
-                updateModuleTitle(moduleId, newTitle);
-
-                // Show error toast
-                setToast({
-                    show: true,
-                    title: 'Update Failed',
-                    description: 'Failed to update module title, but changes were saved locally',
-                    emoji: '⚠️'
-                });
-
-                // Auto-hide toast after 3 seconds
-                setTimeout(() => {
-                    setToast(prev => ({ ...prev, show: false }));
-                }, 3000);
+            if (!response.ok) {
+                throw new Error(`Failed to update module title: ${response.status}`);
             }
+
+            console.log("Module title updated successfully");
+
+            // Show toast notification
+            setToast({
+                show: true,
+                title: 'A makeover',
+                description: `Module name updated successfully`,
+                emoji: '✨'
+            });
+
+            // Auto-hide toast after 3 seconds
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
+        } catch (error) {
+            console.error("Error updating module title:", error);
+
+            // Show error toast
+            setToast({
+                show: true,
+                title: 'Update Failed',
+                description: 'Failed to update module title on server',
+                emoji: '⚠️'
+            });
+
+            // Auto-hide toast after 3 seconds
+            setTimeout(() => {
+                setToast(prev => ({ ...prev, show: false }));
+            }, 3000);
         }
 
         // Turn off editing mode
@@ -1195,29 +1188,24 @@ export default function CreateCourse() {
     };
 
     // For module title editing
-    const enableModuleEditing = (moduleId: string) => {
-        toggleModuleEditing(moduleId, true);
+    const enableModuleEditing = (moduleId: string, newTitle?: string) => {
+        if (typeof newTitle === 'string') {
+            // This is called from the onChange event in CourseModuleList
+            updateModuleTitle(moduleId, newTitle);
+        } else {
+            // This is called to start editing
+            toggleModuleEditing(moduleId, true);
 
-        // More reliable method to set cursor at end with a sufficient delay
-        setTimeout(() => {
-            const moduleElement = document.querySelector(`h2[contenteditable="true"]`) as HTMLElement;
-            if (moduleElement && moduleElement.textContent) {
-                // Create a text node at the end for more reliable cursor placement
-                const textNode = moduleElement.firstChild;
-                if (textNode) {
-                    const selection = window.getSelection();
-                    const range = document.createRange();
-
-                    // Place cursor at the end of the text
-                    range.setStart(textNode, textNode.textContent?.length || 0);
-                    range.setEnd(textNode, textNode.textContent?.length || 0);
-
-                    selection?.removeAllRanges();
-                    selection?.addRange(range);
+            // More reliable method to set cursor at end with a sufficient delay
+            setTimeout(() => {
+                const moduleElement = document.querySelector(`input[data-module-id="${moduleId}"]`) as HTMLInputElement;
+                if (moduleElement) {
+                    moduleElement.focus();
+                    const length = moduleElement.value.length;
+                    moduleElement.setSelectionRange(length, length);
                 }
-                moduleElement.focus();
-            }
-        }, 100); // Increased delay for better reliability
+            }, 100);
+        }
     };
 
     // Modified function to enable edit mode

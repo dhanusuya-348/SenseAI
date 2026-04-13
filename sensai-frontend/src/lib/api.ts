@@ -295,7 +295,7 @@ export const addModule = async (courseId: string, schoolId: string, modules: Mod
           items: [],
           isExpanded: true,
           backgroundColor: `${backgroundColor}80`, // Add 50% opacity for UI display
-          isEditing: false
+          isEditing: true
       };
 
       setModules([...modules, newModule]);
@@ -311,7 +311,7 @@ export const addModule = async (courseId: string, schoolId: string, modules: Mod
           items: [],
           isExpanded: true,
           backgroundColor: `${backgroundColor}80`, // Add 50% opacity for UI display
-          isEditing: false
+          isEditing: true
       };
 
       setModules([...modules, newModule]);

@@ -750,7 +750,16 @@ export default function CourseModuleList({
                                                         <input
                                                             type="text"
                                                             value={module.title}
+                                                            data-module-id={module.id}
                                                             onChange={(e) => onEditModuleTitle && onEditModuleTitle(module.id, e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.preventDefault();
+                                                                    saveModuleTitle && saveModuleTitle(module.id);
+                                                                } else if (e.key === 'Escape') {
+                                                                    cancelModuleEditing && cancelModuleEditing(module.id);
+                                                                }
+                                                            }}
                                                             className="flex-1 text-lg font-light outline-none bg-transparent border-b border-gray-300 dark:border-white/10 focus:border-purple-500 transition-colors"
                                                             placeholder="Module Title"
                                                             autoFocus
